@@ -1,0 +1,23 @@
+# Source files (dist is published)
+src/
+tests/
+
+# Config files
+tsconfig.json
+vitest.config.ts
+.gitignore
+
+# Development files
+*.log
+.DS_Store
+node_modules/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude files
+CLAUDE.md
+.claude/

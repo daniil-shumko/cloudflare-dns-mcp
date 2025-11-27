@@ -1,0 +1,61 @@
+{
+  "name": "cloudflare-dns-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for managing Cloudflare DNS records via Claude Desktop and Claude Code",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "cloudflare-dns-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "dev": "tsup src/index.ts --format esm --watch",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "cloudflare",
+    "dns",
+    "claude",
+    "anthropic",
+    "ai",
+    "llm",
+    "dns-management",
+    "api",
+    "automation"
+  ],
+  "author": "Daniil Shumko",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daniil-shumko/cloudflare-dns-mcp.git"
+  },
+  "homepage": "https://github.com/daniil-shumko/cloudflare-dns-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/daniil-shumko/cloudflare-dns-mcp/issues"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsup": "^8.1.0",
+    "typescript": "^5.5.0",
+    "vitest": "^4.0.14"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
