@@ -18,5 +18,11 @@ RUN npm run build
 # Remove dev dependencies
 RUN npm prune --production
 
-# Set the entrypoint
-ENTRYPOINT ["node", "dist/index.js"]
+# Expose port for HTTP transport
+EXPOSE 8000
+
+# Set environment for HTTP mode
+ENV PORT=8000
+
+# Start the server
+CMD ["node", "dist/index.js"]

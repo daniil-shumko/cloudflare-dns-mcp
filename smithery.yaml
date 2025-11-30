@@ -2,7 +2,7 @@ build:
   dockerfile: Dockerfile
 
 startCommand:
-  type: stdio
+  type: http
   configSchema:
     type: object
     required:
@@ -12,11 +12,5 @@ startCommand:
         type: string
         title: "Cloudflare API Token"
         description: "Your Cloudflare API token with Zone.Zone Read, Zone.DNS Edit permissions"
-  commandFunction: |-
-    (config) => ({
-      command: 'node',
-      args: ['dist/index.js'],
-      env: {
-        CLOUDFLARE_API_TOKEN: config.cloudflareApiToken
-      }
-    })
+  configMapping:
+    CLOUDFLARE_API_TOKEN: "{{cloudflareApiToken}}"
