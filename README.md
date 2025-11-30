@@ -4,6 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/cloudflare-dns-mcp.svg)](https://www.npmjs.com/package/cloudflare-dns-mcp)
 [![Tests](https://github.com/daniil-shumko/cloudflare-dns-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/daniil-shumko/cloudflare-dns-mcp/actions/workflows/test.yml)
+[![smithery badge](https://smithery.ai/badge/@daniil-shumko/cloudflare-dns-mcp)](https://smithery.ai/server/@daniil-shumko/cloudflare-dns-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io)
