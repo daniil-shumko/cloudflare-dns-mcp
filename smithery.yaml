@@ -1,0 +1,19 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - cloudflareApiToken
+    properties:
+      cloudflareApiToken:
+        type: string
+        title: "Cloudflare API Token"
+        description: "Your Cloudflare API token with Zone.Zone Read, Zone.DNS Edit permissions"
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'cloudflare-dns-mcp'],
+      env: {
+        CLOUDFLARE_API_TOKEN: config.cloudflareApiToken
+      }
+    })
