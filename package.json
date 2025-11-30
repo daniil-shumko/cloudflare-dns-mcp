@@ -1,6 +1,6 @@
 {
   "name": "cloudflare-dns-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for managing Cloudflare DNS records via Claude Desktop and Claude Code",
   "type": "module",
   "main": "dist/index.js",
