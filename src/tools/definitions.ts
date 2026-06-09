@@ -2,6 +2,12 @@
  * MCP Tool definitions with metadata and annotations
  */
 
+import { DNS_RECORD_TYPES } from "./schemas.js";
+
+// Single source of truth for the record types the tools accept (mirrors the
+// Zod schemas so the advertised JSON Schema and validation never drift).
+const RECORD_TYPE_ENUM = [...DNS_RECORD_TYPES];
+
 export const TOOLS = [
   {
     name: "add_zone",
@@ -21,14 +27,9 @@ export const TOOLS = [
         },
         type: {
           type: "string",
-          enum: ["full", "partial", "secondary"],
+          enum: ["full", "partial", "secondary", "internal"],
           description:
-            "Zone type: 'full' (default) for full DNS management, 'partial' for CNAME setup, 'secondary' for secondary DNS",
-        },
-        jump_start: {
-          type: "boolean",
-          description:
-            "Automatically fetch existing DNS records (default: false)",
+            "Zone type: 'full' (default) for full DNS management, 'partial' for CNAME setup, 'secondary' for secondary DNS, 'internal' for internal zones",
         },
       },
       required: ["name", "account_id"],
@@ -54,7 +55,7 @@ export const TOOLS = [
         },
         per_page: {
           type: "number",
-          description: "Number of zones per page, max 50 (default: 50)",
+          description: "Number of zones per page, 5-50 (default: 50)",
         },
         name: {
           type: "string",
@@ -124,7 +125,7 @@ export const TOOLS = [
         },
         type: {
           type: "string",
-          enum: ["A", "AAAA", "CNAME", "TXT", "MX", "NS", "SRV", "CAA", "PTR"],
+          enum: RECORD_TYPE_ENUM,
           description: "Filter by record type",
         },
         name: {
@@ -177,7 +178,7 @@ export const TOOLS = [
   {
     name: "create_dns_record",
     description:
-      "Create a new DNS record for a domain. Supports A, AAAA, CNAME, TXT, MX, NS, SRV, and CAA record types. Provide either zone_id or domain_name.",
+      "Create a new DNS record for a domain. Supports common types (A, AAAA, CNAME, TXT, MX, NS, SRV) via 'content', and structured types (CAA, HTTPS, SVCB, ...) via the 'data' object. Provide either zone_id or domain_name.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -191,7 +192,7 @@ export const TOOLS = [
         },
         type: {
           type: "string",
-          enum: ["A", "AAAA", "CNAME", "TXT", "MX", "NS", "SRV", "CAA"],
+          enum: RECORD_TYPE_ENUM,
           description: "DNS record type",
         },
         name: {
@@ -202,12 +203,12 @@ export const TOOLS = [
         content: {
           type: "string",
           description:
-            "Record content: IP address for A/AAAA, hostname for CNAME/MX, text for TXT",
+            "Record content: IP address for A/AAAA, hostname for CNAME/MX, text for TXT. Required for simple records; omit for structured records that use 'data' (e.g. CAA).",
         },
         ttl: {
           type: "number",
           description:
-            "TTL in seconds. Use 1 for automatic (default). Range: 60-86400",
+            "TTL in seconds. Use 1 for automatic (default). Otherwise 60-86400.",
         },
         proxied: {
           type: "boolean",
@@ -216,14 +217,25 @@ export const TOOLS = [
         },
         priority: {
           type: "number",
-          description: "Priority for MX records (required for MX type)",
+          description:
+            "Priority for MX and URI records (required for those types)",
         },
         comment: {
           type: "string",
           description: "Optional comment for the record",
         },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional custom tags for the record",
+        },
+        data: {
+          type: "object",
+          description:
+            "Structured data for record types whose content is read-only, e.g. CAA { flags, tag, value }, SRV { service, proto, name, priority, weight, port, target }, or HTTPS/SVCB service parameters.",
+        },
       },
-      required: ["type", "name", "content"],
+      required: ["type", "name"],
     },
     annotations: {
       title: "Create DNS Record",
@@ -236,7 +248,7 @@ export const TOOLS = [
   {
     name: "update_dns_record",
     description:
-      "Update an existing DNS record. Only specify the fields you want to change.",
+      "Update an existing DNS record (partial update). Only specify the fields you want to change.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -250,7 +262,7 @@ export const TOOLS = [
         },
         type: {
           type: "string",
-          enum: ["A", "AAAA", "CNAME", "TXT", "MX", "NS", "SRV", "CAA"],
+          enum: RECORD_TYPE_ENUM,
           description: "New record type (usually not changed)",
         },
         name: {
@@ -263,15 +275,29 @@ export const TOOLS = [
         },
         ttl: {
           type: "number",
-          description: "New TTL in seconds",
+          description: "New TTL in seconds (1 for automatic, otherwise 60-86400)",
         },
         proxied: {
           type: "boolean",
           description: "New proxy status",
         },
+        priority: {
+          type: "number",
+          description: "New priority (for MX and URI records)",
+        },
         comment: {
           type: "string",
           description: "New comment",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "New custom tags for the record",
+        },
+        data: {
+          type: "object",
+          description:
+            "New structured data for record types like CAA/SRV/HTTPS/SVCB (see create_dns_record).",
         },
       },
       required: ["zone_id", "record_id"],
@@ -332,7 +358,7 @@ export const TOOLS = [
         },
         type: {
           type: "string",
-          enum: ["A", "AAAA", "CNAME", "TXT", "MX", "NS", "SRV", "CAA", "PTR"],
+          enum: RECORD_TYPE_ENUM,
           description: "Optional: filter by record type",
         },
       },

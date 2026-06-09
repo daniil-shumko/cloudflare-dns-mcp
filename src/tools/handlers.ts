@@ -85,7 +85,6 @@ export async function handleAddZone(
   const input = AddZoneSchema.parse(args);
   const response = await cloudflare.createZone(input.name, input.account_id, {
     type: input.type,
-    jump_start: input.jump_start,
   });
 
   const zone = response.result;
@@ -256,6 +255,8 @@ export async function handleCreateDNSRecord(
     proxied: input.proxied,
     priority: input.priority,
     comment: input.comment,
+    tags: input.tags,
+    data: input.data,
   });
 
   const result = formatSuccess(
@@ -280,7 +281,10 @@ export async function handleUpdateDNSRecord(
   if (input.content !== undefined) updateData.content = input.content;
   if (input.ttl !== undefined) updateData.ttl = input.ttl;
   if (input.proxied !== undefined) updateData.proxied = input.proxied;
+  if (input.priority !== undefined) updateData.priority = input.priority;
   if (input.comment !== undefined) updateData.comment = input.comment;
+  if (input.tags !== undefined) updateData.tags = input.tags;
+  if (input.data !== undefined) updateData.data = input.data;
 
   const response = await cloudflare.updateDNSRecord(
     input.zone_id,

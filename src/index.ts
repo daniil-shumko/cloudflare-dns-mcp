@@ -4,18 +4,16 @@
  * Cloudflare DNS MCP Server
  *
  * A Model Context Protocol server for managing Cloudflare DNS records.
- * Supports both stdio transport (for Claude Desktop/Code) and HTTP transport (for Smithery).
+ * Communicates over stdio for Claude Desktop and Claude Code.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import express, { Request, Response } from "express";
 
 import { CloudflareClient, CloudflareAPIError } from "./cloudflare/client.js";
 import { loadConfig } from "./utils/config.js";
@@ -26,7 +24,7 @@ function createServer(cloudflare: CloudflareClient): Server {
   const server = new Server(
     {
       name: "cloudflare-dns",
-      version: "1.0.0",
+      version: __SERVER_VERSION__,
     },
     {
       capabilities: {
@@ -53,7 +51,7 @@ function createServer(cloudflare: CloudflareClient): Server {
           error: true,
           code: "VALIDATION_ERROR",
           message: "Invalid input parameters",
-          details: error.errors
+          details: error.issues
             .map((e) => `${e.path.join(".")}: ${e.message}`)
             .join("; "),
         };
@@ -88,59 +86,6 @@ function createServer(cloudflare: CloudflareClient): Server {
   return server;
 }
 
-async function runStdioTransport(cloudflare: CloudflareClient) {
-  const server = createServer(cloudflare);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-
-  console.error("Cloudflare DNS MCP Server started (stdio)");
-  console.error("Tools available: " + TOOLS.map((t) => t.name).join(", "));
-}
-
-async function runHttpTransport(cloudflare: CloudflareClient) {
-  const app = express();
-  app.use(express.json());
-
-  // Store transports by session ID for proper cleanup
-  const transports = new Map<string, StreamableHTTPServerTransport>();
-
-  // MCP endpoint
-  app.all("/mcp", async (req: Request, res: Response) => {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    let transport: StreamableHTTPServerTransport;
-
-    if (sessionId && transports.has(sessionId)) {
-      transport = transports.get(sessionId)!;
-    } else {
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-      });
-      const server = createServer(cloudflare);
-      await server.connect(transport);
-
-      // Store transport if it has a session ID
-      transport.onclose = () => {
-        if (sessionId) {
-          transports.delete(sessionId);
-        }
-      };
-    }
-
-    await transport.handleRequest(req, res, req.body);
-  });
-
-  // Health check endpoint
-  app.get("/", (_req: Request, res: Response) => {
-    res.send("Cloudflare DNS MCP Server is running!");
-  });
-
-  const PORT = process.env.PORT || 8000;
-  app.listen(PORT, () => {
-    console.log(`Cloudflare DNS MCP Server running on port ${PORT} (HTTP)`);
-    console.log("Tools available: " + TOOLS.map((t) => t.name).join(", "));
-  });
-}
-
 async function main() {
   // Load configuration
   const config = loadConfig();
@@ -148,14 +93,14 @@ async function main() {
   // Initialize Cloudflare client
   const cloudflare = new CloudflareClient(config.apiToken);
 
-  // Check transport mode
-  const useHttp = process.env.MCP_TRANSPORT === "http" || process.env.PORT;
+  // Connect over stdio (the transport used by Claude Desktop and Claude Code)
+  const server = createServer(cloudflare);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
 
-  if (useHttp) {
-    await runHttpTransport(cloudflare);
-  } else {
-    await runStdioTransport(cloudflare);
-  }
+  // All logging must go to stderr — stdout is reserved for the MCP protocol.
+  console.error("Cloudflare DNS MCP Server started (stdio)");
+  console.error("Tools available: " + TOOLS.map((t) => t.name).join(", "));
 }
 
 // Run the server

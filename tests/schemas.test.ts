@@ -26,7 +26,6 @@ describe("AddZoneSchema", () => {
     if (result.success) {
       expect(result.data.name).toBe("example.com");
       expect(result.data.type).toBe("full"); // default
-      expect(result.data.jump_start).toBe(false); // default
     }
   });
 
@@ -35,12 +34,30 @@ describe("AddZoneSchema", () => {
       name: "example.com",
       account_id: "abc123",
       type: "partial",
-      jump_start: true,
     });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.type).toBe("partial");
-      expect(result.data.jump_start).toBe(true);
+    }
+  });
+
+  it("accepts the 'internal' zone type", () => {
+    const result = AddZoneSchema.safeParse({
+      name: "example.com",
+      account_id: "abc123",
+      type: "internal",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("does not carry a jump_start field (removed from the API)", () => {
+    const result = AddZoneSchema.safeParse({
+      name: "example.com",
+      account_id: "abc123",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect("jump_start" in result.data).toBe(false);
     }
   });
 
@@ -202,6 +219,67 @@ describe("CreateDNSRecordSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("accepts a CAA record supplied via structured data (no content)", () => {
+    const result = CreateDNSRecordSchema.safeParse({
+      zone_id: "abc123",
+      type: "CAA",
+      name: "example.com",
+      data: { flags: 0, tag: "issue", value: "letsencrypt.org" },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects when neither content nor data is provided", () => {
+    const result = CreateDNSRecordSchema.safeParse({
+      zone_id: "abc123",
+      type: "A",
+      name: "www",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts ttl=1 (automatic) and rejects out-of-range ttl", () => {
+    const auto = CreateDNSRecordSchema.safeParse({
+      zone_id: "abc",
+      type: "A",
+      name: "www",
+      content: "1.2.3.4",
+      ttl: 1,
+    });
+    expect(auto.success).toBe(true);
+
+    // 30 is below the API's non-automatic minimum of 60 and is not 1
+    const tooLow = CreateDNSRecordSchema.safeParse({
+      zone_id: "abc",
+      type: "A",
+      name: "www",
+      content: "1.2.3.4",
+      ttl: 30,
+    });
+    expect(tooLow.success).toBe(false);
+
+    const valid = CreateDNSRecordSchema.safeParse({
+      zone_id: "abc",
+      type: "A",
+      name: "www",
+      content: "1.2.3.4",
+      ttl: 3600,
+    });
+    expect(valid.success).toBe(true);
+  });
+
+  it("accepts the expanded record types (HTTPS, SVCB, URI)", () => {
+    for (const type of ["HTTPS", "SVCB", "URI"]) {
+      const result = CreateDNSRecordSchema.safeParse({
+        zone_id: "abc",
+        type,
+        name: "example.com",
+        data: { foo: "bar" },
+      });
+      expect(result.success).toBe(true);
+    }
+  });
 });
 
 describe("UpdateDNSRecordSchema", () => {
@@ -221,6 +299,18 @@ describe("UpdateDNSRecordSchema", () => {
       content: "new-value",
     });
     expect(result.success).toBe(true);
+  });
+
+  it("accepts a priority update (MX/URI)", () => {
+    const result = UpdateDNSRecordSchema.safeParse({
+      zone_id: "abc",
+      record_id: "xyz",
+      priority: 20,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.priority).toBe(20);
+    }
   });
 });
 

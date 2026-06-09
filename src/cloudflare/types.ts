@@ -15,11 +15,14 @@ export interface CloudflareResponse<T> {
 export interface CloudflareError {
   code: number;
   message: string;
+  documentation_url?: string;
+  source?: { pointer?: string };
 }
 
 export interface CloudflareMessage {
   code: number;
   message: string;
+  documentation_url?: string;
 }
 
 export interface ResultInfo {
@@ -36,7 +39,7 @@ export interface Zone {
   name: string;
   status: ZoneStatus;
   paused: boolean;
-  type: "full" | "partial" | "secondary";
+  type: "full" | "partial" | "secondary" | "internal";
   development_mode: number;
   name_servers: string[];
   original_name_servers: string[] | null;
@@ -105,11 +108,12 @@ export type DNSRecordType =
   | "CAA"
   | "PTR"
   | "SOA"
-  | "SPF"
   | "CERT"
   | "DNSKEY"
   | "DS"
+  | "LOC"
   | "NAPTR"
+  | "OPENPGPKEY"
   | "SMIMEA"
   | "SSHFP"
   | "SVCB"
@@ -193,13 +197,15 @@ export interface ListDNSRecordsParams {
 export interface CreateDNSRecordInput {
   type: DNSRecordType;
   name: string;
-  content: string;
+  // Optional because structured records (CAA, HTTPS, SVCB, ...) set their
+  // content via the `data` object — their `content` field is read-only.
+  content?: string;
   ttl?: number;
   proxied?: boolean;
   priority?: number;
   comment?: string;
   tags?: string[];
-  // For SRV records
+  // Structured data for record types like CAA/SRV/HTTPS/SVCB
   data?: SRVData | CAAData | Record<string, unknown>;
 }
 
@@ -212,6 +218,7 @@ export interface UpdateDNSRecordInput {
   priority?: number;
   comment?: string;
   tags?: string[];
+  data?: SRVData | CAAData | Record<string, unknown>;
 }
 
 // Delete response

@@ -60,6 +60,26 @@ describe("formatError", () => {
     expect(result.suggestion).toContain("Rate limit");
   });
 
+  it("maps CNAME-coexistence (81053) to a CNAME-specific suggestion", () => {
+    const error = new CloudflareAPIError(
+      [{ code: 81053, message: "An A, AAAA, or CNAME record already exists" }],
+      400
+    );
+    const result = formatError(error);
+
+    expect(result.suggestion).toContain("CNAME");
+  });
+
+  it("maps 7000 (no route for URI) to a path/id suggestion, not not-found", () => {
+    const error = new CloudflareAPIError(
+      [{ code: 7000, message: "No route for that URI" }],
+      404
+    );
+    const result = formatError(error);
+
+    expect(result.suggestion).toContain("zone_id");
+  });
+
   it("formats generic Error", () => {
     const error = new Error("Something went wrong");
     const result = formatError(error);

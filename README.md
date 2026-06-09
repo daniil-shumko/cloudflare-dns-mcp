@@ -4,9 +4,8 @@
 
 [![npm version](https://img.shields.io/npm/v/cloudflare-dns-mcp.svg)](https://www.npmjs.com/package/cloudflare-dns-mcp)
 [![Tests](https://github.com/daniil-shumko/cloudflare-dns-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/daniil-shumko/cloudflare-dns-mcp/actions/workflows/test.yml)
-[![smithery badge](https://smithery.ai/badge/@daniil-shumko/cloudflare-dns-mcp)](https://smithery.ai/server/@daniil-shumko/cloudflare-dns-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io)
 
 > ⚠️ **Security Warning**
@@ -35,7 +34,7 @@ The Model Context Protocol (MCP) is an open standard that allows AI assistants l
 - **List and search domains** - View all zones on your Cloudflare account
 - **Full DNS management** - Create, read, update, and delete DNS records
 - **Backup & export** - Export DNS records to JSON for backup or migration
-- **Multiple record types** - Supports A, AAAA, CNAME, TXT, MX, NS, SRV, CAA, and PTR records
+- **Wide record-type support** - Common types (A, AAAA, CNAME, TXT, MX, NS, SRV) via `content`, plus structured types (CAA, HTTPS, SVCB, TLSA, SSHFP, URI, …) via the `data` field
 - **Flexible identification** - Use either zone IDs or domain names
 - **Cloudflare proxy support** - Toggle orange cloud (proxy) status on records
 
@@ -137,8 +136,7 @@ Add a new domain (zone) to your Cloudflare account. The domain's nameservers mus
 |-----------|------|----------|-------------|
 | `name` | string | Yes | The domain name to add (e.g., `example.com`) |
 | `account_id` | string | Yes | Your Cloudflare account ID (found in dashboard URL or API) |
-| `type` | string | No | Zone type: `full` (default), `partial`, or `secondary` |
-| `jump_start` | boolean | No | Automatically fetch existing DNS records (default: false) |
+| `type` | string | No | Zone type: `full` (default), `partial`, `secondary`, or `internal` |
 
 **Finding your Account ID:**
 - In Cloudflare Dashboard URL: `https://dash.cloudflare.com/<ACCOUNT_ID>/...`
@@ -147,7 +145,6 @@ Add a new domain (zone) to your Cloudflare account. The domain's nameservers mus
 **Example prompts:**
 - "Add example.com to my Cloudflare account"
 - "Create a new zone for mydomain.io with account ID abc123"
-- "Add newsite.com to Cloudflare and fetch existing DNS records"
 
 **Response includes:**
 - Zone ID for future operations
@@ -166,7 +163,7 @@ List all domains (zones) on your Cloudflare account.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `page` | number | No | Page number (default: 1) |
-| `per_page` | number | No | Results per page, max 50 (default: 50) |
+| `per_page` | number | No | Results per page, 5-50 (default: 50) |
 | `name` | string | No | Filter by domain name (partial match) |
 | `status` | string | No | Filter by status: `active`, `pending`, `initializing`, `moved`, `deleted`, `deactivated` |
 
@@ -205,7 +202,7 @@ List all DNS records for a domain.
 |-----------|------|----------|-------------|
 | `zone_id` | string | No* | The zone ID |
 | `domain_name` | string | No* | The domain name |
-| `type` | string | No | Filter by record type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `SRV`, `CAA`, `PTR` |
+| `type` | string | No | Filter by record type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `SRV`, `CAA`, `PTR`, `HTTPS`, `SVCB`, and other standard types |
 | `name` | string | No | Filter by record name |
 | `page` | number | No | Page number (default: 1) |
 | `per_page` | number | No | Results per page, max 100 (default: 100) |
@@ -261,15 +258,18 @@ Create a new DNS record.
 |-----------|------|----------|-------------|
 | `zone_id` | string | No* | The zone ID |
 | `domain_name` | string | No* | The domain name |
-| `type` | string | Yes | Record type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `SRV`, `CAA` |
+| `type` | string | Yes | Record type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `SRV`, `CAA`, `HTTPS`, `SVCB`, `TLSA`, `SSHFP`, `URI`, and other standard types |
 | `name` | string | Yes | Record name (use `@` or domain for root) |
-| `content` | string | Yes | Record content (IP, hostname, or text) |
-| `ttl` | number | No | TTL in seconds, 1 = automatic (default: 1) |
+| `content` | string | No** | Record content (IP, hostname, or text) for simple records |
+| `data` | object | No** | Structured data for records whose content is read-only, e.g. CAA `{ flags, tag, value }`, SRV, or HTTPS/SVCB params |
+| `ttl` | number | No | TTL in seconds: `1` = automatic (default), otherwise `60`–`86400` |
 | `proxied` | boolean | No | Enable Cloudflare proxy (default: false) |
-| `priority` | number | No | Priority for MX records |
+| `priority` | number | No | Priority for MX and URI records |
 | `comment` | string | No | Optional comment |
+| `tags` | string[] | No | Optional custom tags |
 
 *One of `zone_id` or `domain_name` is required.
+**One of `content` (simple records) or `data` (structured records like CAA) is required.
 
 **Example prompts:**
 - "Add an A record for www.example.com pointing to 192.168.1.1"
@@ -292,12 +292,16 @@ Update an existing DNS record. Only specify the fields you want to change.
 | `type` | string | No | New record type |
 | `name` | string | No | New record name |
 | `content` | string | No | New content |
-| `ttl` | number | No | New TTL |
+| `ttl` | number | No | New TTL (`1` = automatic, otherwise `60`–`86400`) |
 | `proxied` | boolean | No | New proxy status |
+| `priority` | number | No | New priority (for MX and URI records) |
 | `comment` | string | No | New comment |
+| `tags` | string[] | No | New custom tags |
+| `data` | object | No | New structured data (CAA/SRV/HTTPS/SVCB) |
 
 **Example prompts:**
 - "Change the IP for www.example.com to 10.0.0.1"
+- "Change the priority of the MX record to 20"
 - "Enable Cloudflare proxy for the www record on example.com"
 - "Update the TTL for api.example.com to 300 seconds"
 
@@ -498,7 +502,7 @@ claude mcp add cloudflare-dns npx cloudflare-dns-mcp
 
 ### Prerequisites
 
-- Node.js 18 or higher
+- Node.js 20 or higher
 - npm or yarn
 
 ### Setup

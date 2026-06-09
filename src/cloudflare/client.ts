@@ -31,6 +31,9 @@ export class CloudflareAPIError extends Error {
 }
 
 export class CloudflareClient {
+  /** Safety cap on pagination loops to avoid unbounded request fan-out. */
+  private static readonly MAX_PAGES = 100;
+
   private readonly baseUrl = "https://api.cloudflare.com/client/v4";
   private readonly apiToken: string;
 
@@ -69,10 +72,53 @@ export class CloudflareClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    const data = (await response.json()) as CloudflareResponse<T>;
+    // Read the body as text first so a non-JSON or empty response (e.g. an HTML
+    // error page from an upstream proxy, or a 429/5xx with no body) surfaces as
+    // a structured CloudflareAPIError carrying the HTTP status rather than an
+    // opaque SyntaxError from response.json().
+    const rawBody = await response.text();
+    let data: CloudflareResponse<T> | undefined;
+
+    if (rawBody) {
+      try {
+        data = JSON.parse(rawBody) as CloudflareResponse<T>;
+      } catch {
+        throw new CloudflareAPIError(
+          [
+            {
+              code: response.status,
+              message: `Cloudflare returned a non-JSON response (HTTP ${response.status} ${response.statusText}): ${rawBody.slice(0, 200)}`,
+            },
+          ],
+          response.status
+        );
+      }
+    }
+
+    if (!data) {
+      throw new CloudflareAPIError(
+        [
+          {
+            code: response.status,
+            message: `Empty response from Cloudflare (HTTP ${response.status} ${response.statusText})`,
+          },
+        ],
+        response.status
+      );
+    }
 
     if (!data.success) {
-      throw new CloudflareAPIError(data.errors, response.status);
+      const errors =
+        Array.isArray(data.errors) && data.errors.length > 0
+          ? data.errors
+          : [
+              {
+                code: response.status,
+                message:
+                  response.statusText || "Unknown Cloudflare API error",
+              },
+            ];
+      throw new CloudflareAPIError(errors, response.status);
     }
 
     return data;
@@ -112,13 +158,12 @@ export class CloudflareClient {
   async createZone(
     name: string,
     accountId: string,
-    options?: { type?: "full" | "partial" | "secondary"; jump_start?: boolean }
+    options?: { type?: "full" | "partial" | "secondary" | "internal" }
   ): Promise<CloudflareResponse<Zone>> {
     return this.request<Zone>("POST", "/zones", {
       name,
       account: { id: accountId },
       type: options?.type ?? "full",
-      jump_start: options?.jump_start ?? false,
     });
   }
 
@@ -127,7 +172,9 @@ export class CloudflareClient {
    * Returns null if not found
    */
   async getZoneByName(name: string): Promise<Zone | null> {
-    const response = await this.listZones({ name, per_page: 1 });
+    // per_page must be >= 5 (the /zones API minimum); the exact-match filter
+    // below narrows the (typically single) result regardless.
+    const response = await this.listZones({ name, per_page: 5 });
     if (response.result.length === 0) {
       return null;
     }
@@ -275,16 +322,33 @@ export class CloudflareClient {
     recordName: string,
     recordType?: string
   ): Promise<DNSRecord[]> {
-    const params: ListDNSRecordsParams = {
-      name: recordName,
-      per_page: 100,
-    };
-    if (recordType) {
-      params.type = recordType as ListDNSRecordsParams["type"];
+    const records: DNSRecord[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    // Paginate so names shared by more than 100 records (e.g. large
+    // round-robin A/AAAA sets) are returned in full, not silently truncated.
+    while (hasMore && page <= CloudflareClient.MAX_PAGES) {
+      const params: ListDNSRecordsParams = {
+        name: recordName,
+        per_page: 100,
+        page,
+      };
+      if (recordType) {
+        params.type = recordType as ListDNSRecordsParams["type"];
+      }
+
+      const response = await this.listDNSRecords(zoneId, params);
+      records.push(...response.result);
+
+      if (response.result_info && page < response.result_info.total_pages) {
+        page++;
+      } else {
+        hasMore = false;
+      }
     }
 
-    const response = await this.listDNSRecords(zoneId, params);
-    return response.result;
+    return records;
   }
 
   // ==================== Utility Methods ====================
