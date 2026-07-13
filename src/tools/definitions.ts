@@ -2,15 +2,18 @@
  * MCP Tool definitions with metadata and annotations
  */
 
-import { DNS_RECORD_TYPES } from "./schemas.js";
+import { DNS_RECORD_TYPES, ZONE_STATUSES } from "./schemas.js";
 
-// Single source of truth for the record types the tools accept (mirrors the
-// Zod schemas so the advertised JSON Schema and validation never drift).
+// Single source of truth for the record types and zone statuses the tools
+// accept (mirrors the Zod schemas so the advertised JSON Schema and
+// validation never drift).
 const RECORD_TYPE_ENUM = [...DNS_RECORD_TYPES];
+const ZONE_STATUS_ENUM = [...ZONE_STATUSES];
 
-export const TOOLS = [
+const TOOL_DEFINITIONS = [
   {
     name: "add_zone",
+    title: "Add Zone to Cloudflare",
     description:
       "Add a new domain (zone) to your Cloudflare account. The domain's nameservers must be updated at your registrar to point to Cloudflare's nameservers after adding.",
     inputSchema: {
@@ -35,7 +38,6 @@ export const TOOLS = [
       required: ["name", "account_id"],
     },
     annotations: {
-      title: "Add Zone to Cloudflare",
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
@@ -44,6 +46,7 @@ export const TOOLS = [
   },
   {
     name: "list_zones",
+    title: "List Cloudflare Zones",
     description:
       "List all domains (zones) on your Cloudflare account. Returns zone IDs, domain names, status, and nameservers.",
     inputSchema: {
@@ -63,20 +66,12 @@ export const TOOLS = [
         },
         status: {
           type: "string",
-          enum: [
-            "active",
-            "pending",
-            "initializing",
-            "moved",
-            "deleted",
-            "deactivated",
-          ],
+          enum: ZONE_STATUS_ENUM,
           description: "Filter by zone status",
         },
       },
     },
     annotations: {
-      title: "List Cloudflare Zones",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -85,6 +80,7 @@ export const TOOLS = [
   },
   {
     name: "get_zone_details",
+    title: "Get Zone Details",
     description:
       "Get detailed information about a specific domain/zone including nameservers, plan, and settings. Provide either zone_id or domain_name.",
     inputSchema: {
@@ -101,7 +97,6 @@ export const TOOLS = [
       },
     },
     annotations: {
-      title: "Get Zone Details",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -110,6 +105,7 @@ export const TOOLS = [
   },
   {
     name: "list_dns_records",
+    title: "List DNS Records",
     description:
       "List all DNS records for a domain. Returns record types, names, content, TTL, and proxy status. Provide either zone_id or domain_name.",
     inputSchema: {
@@ -143,7 +139,6 @@ export const TOOLS = [
       },
     },
     annotations: {
-      title: "List DNS Records",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -152,6 +147,7 @@ export const TOOLS = [
   },
   {
     name: "get_dns_record",
+    title: "Get DNS Record",
     description: "Get details of a specific DNS record by its ID.",
     inputSchema: {
       type: "object" as const,
@@ -168,7 +164,6 @@ export const TOOLS = [
       required: ["zone_id", "record_id"],
     },
     annotations: {
-      title: "Get DNS Record",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -177,6 +172,7 @@ export const TOOLS = [
   },
   {
     name: "create_dns_record",
+    title: "Create DNS Record",
     description:
       "Create a new DNS record for a domain. Supports common types (A, AAAA, CNAME, TXT, MX, NS, SRV) via 'content', and structured types (CAA, HTTPS, SVCB, ...) via the 'data' object. Provide either zone_id or domain_name.",
     inputSchema: {
@@ -208,7 +204,7 @@ export const TOOLS = [
         ttl: {
           type: "number",
           description:
-            "TTL in seconds. Use 1 for automatic (default). Otherwise 60-86400.",
+            "TTL in seconds. Use 1 for automatic (default). Otherwise 60-86400 (minimum 30 for Enterprise zones).",
         },
         proxied: {
           type: "boolean",
@@ -238,7 +234,6 @@ export const TOOLS = [
       required: ["type", "name"],
     },
     annotations: {
-      title: "Create DNS Record",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
@@ -247,6 +242,7 @@ export const TOOLS = [
   },
   {
     name: "update_dns_record",
+    title: "Update DNS Record",
     description:
       "Update an existing DNS record (partial update). Only specify the fields you want to change.",
     inputSchema: {
@@ -275,7 +271,8 @@ export const TOOLS = [
         },
         ttl: {
           type: "number",
-          description: "New TTL in seconds (1 for automatic, otherwise 60-86400)",
+          description:
+            "New TTL in seconds (1 for automatic, otherwise 60-86400; minimum 30 for Enterprise zones)",
         },
         proxied: {
           type: "boolean",
@@ -303,7 +300,6 @@ export const TOOLS = [
       required: ["zone_id", "record_id"],
     },
     annotations: {
-      title: "Update DNS Record",
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: true,
@@ -312,6 +308,7 @@ export const TOOLS = [
   },
   {
     name: "delete_dns_record",
+    title: "Delete DNS Record",
     description:
       "Delete a DNS record. WARNING: This action is irreversible. Make sure you have the correct record_id.",
     inputSchema: {
@@ -329,7 +326,6 @@ export const TOOLS = [
       required: ["zone_id", "record_id"],
     },
     annotations: {
-      title: "Delete DNS Record",
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
@@ -338,6 +334,7 @@ export const TOOLS = [
   },
   {
     name: "find_dns_records",
+    title: "Find DNS Records",
     description:
       "Find DNS records by name to get their record IDs. Useful before updating or deleting records when you know the name but not the ID. Returns matching records with their IDs.",
     inputSchema: {
@@ -365,7 +362,6 @@ export const TOOLS = [
       required: ["record_name"],
     },
     annotations: {
-      title: "Find DNS Records",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -374,6 +370,7 @@ export const TOOLS = [
   },
   {
     name: "backup_dns_records",
+    title: "Backup DNS Records",
     description:
       "Backup DNS records to a JSON format that can be saved and used later to restore records. Can backup a single domain or ALL domains on the account. The output is a complete backup file that agents can save to disk.",
     inputSchema: {
@@ -392,7 +389,6 @@ export const TOOLS = [
       },
     },
     annotations: {
-      title: "Backup DNS Records",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -400,3 +396,10 @@ export const TOOLS = [
     },
   },
 ];
+
+// Stamp each tool's display title into annotations.title — the pre-2025-06-18
+// spec's fallback location — so the two names can never drift.
+export const TOOLS = TOOL_DEFINITIONS.map((tool) => ({
+  ...tool,
+  annotations: { title: tool.title, ...tool.annotations },
+}));

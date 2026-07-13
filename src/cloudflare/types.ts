@@ -51,31 +51,45 @@ export interface Zone {
   meta: ZoneMeta;
   owner: ZoneOwner;
   account: ZoneAccount;
-  permissions: string[];
-  plan: ZonePlan;
+  vanity_name_servers?: string[];
+  verification_key?: string;
+  cname_suffix?: string;
+  /** Deprecated in the API (replaced by account memberships); never read here. */
+  permissions?: string[];
+  /**
+   * Deprecated in the API (replaced by GET /zones/{zone_id}/subscription).
+   * Still returned today, but treat as removable — always guard access.
+   */
+  plan?: ZonePlan;
 }
 
-export type ZoneStatus =
-  | "active"
-  | "pending"
-  | "initializing"
-  | "moved"
-  | "deleted"
-  | "deactivated"
-  | "read only";
+/**
+ * Zone statuses the current API accepts (both as a list filter and in
+ * responses). `deleted`/`deactivated` were removed from the API enum.
+ */
+export const ZONE_STATUSES = [
+  "active",
+  "pending",
+  "initializing",
+  "moved",
+] as const;
+
+export type ZoneStatus = (typeof ZONE_STATUSES)[number];
 
 export interface ZoneMeta {
-  step: number;
-  custom_certificate_quota: number;
-  page_rule_quota: number;
-  phishing_detected: boolean;
-  multiple_railguns_allowed: boolean;
+  cdn_only?: boolean;
+  custom_certificate_quota?: number;
+  dns_only?: boolean;
+  foundation_dns?: boolean;
+  page_rule_quota?: number;
+  phishing_detected?: boolean;
+  step?: number;
 }
 
 export interface ZoneOwner {
-  id: string | null;
-  type: string;
-  email: string | null;
+  id?: string | null;
+  name?: string | null;
+  type?: string;
 }
 
 export interface ZoneAccount {
@@ -84,16 +98,16 @@ export interface ZoneAccount {
 }
 
 export interface ZonePlan {
-  id: string;
-  name: string;
-  price: number;
-  currency: string;
-  frequency: string;
-  is_subscribed: boolean;
-  can_subscribe: boolean;
-  legacy_id: string;
-  legacy_discount: boolean;
-  externally_managed: boolean;
+  id?: string;
+  name?: string;
+  price?: number;
+  currency?: string;
+  frequency?: string;
+  is_subscribed?: boolean;
+  can_subscribe?: boolean;
+  legacy_id?: string;
+  legacy_discount?: boolean;
+  externally_managed?: boolean;
 }
 
 // DNS Record types
@@ -107,7 +121,6 @@ export type DNSRecordType =
   | "SRV"
   | "CAA"
   | "PTR"
-  | "SOA"
   | "CERT"
   | "DNSKEY"
   | "DS"
@@ -123,31 +136,41 @@ export type DNSRecordType =
 
 export interface DNSRecord {
   id: string;
-  zone_id: string;
-  zone_name: string;
   name: string;
   type: DNSRecordType;
   content: string;
   proxiable: boolean;
   proxied: boolean;
   ttl: number;
-  locked: boolean;
   meta: DNSRecordMeta;
   comment: string | null;
   tags: string[];
   created_on: string;
   modified_on: string;
+  comment_modified_on?: string;
+  tags_modified_on?: string;
+  settings?: DNSRecordSettings;
   // MX-specific
   priority?: number;
   // SRV-specific
   data?: SRVData | CAAData | Record<string, unknown>;
 }
 
+/** The API declares meta as an opaque object; these are its documented keys. */
 export interface DNSRecordMeta {
-  auto_added: boolean;
-  managed_by_apps: boolean;
-  managed_by_argo_tunnel: boolean;
-  source?: string;
+  is_glue?: boolean;
+  dead_glue?: boolean;
+  shadowed_by?: string[];
+  shadowed_records_count?: number;
+  [key: string]: unknown;
+}
+
+export interface DNSRecordSettings {
+  /** A/AAAA only: serve this record only over IPv4 / IPv6. */
+  ipv4_only?: boolean;
+  ipv6_only?: boolean;
+  /** Unproxied CNAME only: flatten to the target's address records. */
+  flatten_cname?: boolean;
 }
 
 export interface SRVData {
@@ -232,7 +255,8 @@ export interface ZoneSummary {
   name: string;
   status: ZoneStatus;
   name_servers: string[];
-  plan: string;
+  /** null when the API omits the deprecated plan object */
+  plan: string | null;
   created_on: string;
   modified_on: string;
 }

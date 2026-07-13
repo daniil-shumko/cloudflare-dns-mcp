@@ -230,7 +230,7 @@ export class CloudflareClient {
         direction: params?.direction,
         match: params?.match,
         tag: params?.tag,
-        "tag-match": params?.tag_match,
+        tag_match: params?.tag_match,
         search: params?.search,
         comment: params?.comment,
       }

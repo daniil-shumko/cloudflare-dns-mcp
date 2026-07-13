@@ -8,7 +8,7 @@ import { CloudflareClient, CloudflareAPIError } from "../src/cloudflare/client.j
 
 function mockFetch(body: string, status: number, statusText = "") {
   return vi.fn(
-    async () =>
+    async (_url: string) =>
       new Response(body, {
         status,
         statusText,
@@ -89,6 +89,22 @@ describe("CloudflareClient.request", () => {
     const err = await client.listZones().catch((e) => e);
     expect(err).toBeInstanceOf(CloudflareAPIError);
     expect(err.statusCode).toBe(429);
+  });
+
+  it("serializes the tag filter params under the API's underscore names", async () => {
+    const fetchMock = mockFetch(okEnvelope, 200);
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new CloudflareClient("token");
+    await client.listDNSRecords("0123456789abcdef0123456789abcdef", {
+      tag: "team:dns",
+      tag_match: "any",
+    });
+
+    const params = new URL(fetchMock.mock.calls[0][0]).searchParams;
+    expect(params.get("tag")).toBe("team:dns");
+    // The API expects tag_match; the old hyphenated tag-match is ignored by it
+    expect(params.get("tag_match")).toBe("any");
+    expect(params.has("tag-match")).toBe(false);
   });
 
   it("throws when an error envelope has an empty errors array", async () => {

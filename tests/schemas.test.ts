@@ -249,13 +249,23 @@ describe("CreateDNSRecordSchema", () => {
     });
     expect(auto.success).toBe(true);
 
-    // 30 is below the API's non-automatic minimum of 60 and is not 1
-    const tooLow = CreateDNSRecordSchema.safeParse({
+    // 30 is valid for Enterprise zones (the API's reduced minimum)
+    const enterpriseMin = CreateDNSRecordSchema.safeParse({
       zone_id: "abc",
       type: "A",
       name: "www",
       content: "1.2.3.4",
       ttl: 30,
+    });
+    expect(enterpriseMin.success).toBe(true);
+
+    // 29 is below the API minimum on every plan and is not 1
+    const tooLow = CreateDNSRecordSchema.safeParse({
+      zone_id: "abc",
+      type: "A",
+      name: "www",
+      content: "1.2.3.4",
+      ttl: 29,
     });
     expect(tooLow.success).toBe(false);
 

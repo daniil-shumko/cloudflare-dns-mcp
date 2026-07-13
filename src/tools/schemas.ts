@@ -4,10 +4,13 @@
 
 import { z } from "zod";
 
+import { ZONE_STATUSES } from "../cloudflare/types.js";
+
 /**
- * DNS record types the tools accept. SOA is intentionally excluded — it is
- * system-managed and read-only. Structured types (CAA, HTTPS, SVCB, ...) are
- * created/updated via the `data` object rather than a `content` string.
+ * DNS record types the tools accept — the full enum the current API exposes
+ * (SOA is system-managed and not part of the API's record-type enum).
+ * Structured types (CAA, HTTPS, SVCB, ...) are created/updated via the
+ * `data` object rather than a `content` string.
  */
 export const DNS_RECORD_TYPES = [
   "A",
@@ -35,9 +38,14 @@ export const DNS_RECORD_TYPES = [
 
 /**
  * Cloudflare TTL: `1` means "automatic"; otherwise the value must be an integer
- * between 60 and 86400 seconds. Values in 2–59 are rejected by the API.
+ * between 60 and 86400 seconds, with the minimum reduced to 30 for Enterprise
+ * zones. Values in 2–29 are rejected by the API on all plans; the API enforces
+ * the 60-second floor for non-Enterprise zones with a clear error.
  */
-const ttlSchema = z.union([z.literal(1), z.number().int().min(60).max(86400)]);
+const ttlSchema = z.union([z.literal(1), z.number().int().min(30).max(86400)]);
+
+// Single source of truth for zone statuses lives next to the ZoneStatus type.
+export { ZONE_STATUSES };
 
 /**
  * Structured record data for types whose `content` is read-only on the API,
@@ -58,16 +66,7 @@ export const ListZonesSchema = z.object({
   page: z.number().optional().default(1),
   per_page: z.number().min(5).max(50).optional().default(50),
   name: z.string().optional(),
-  status: z
-    .enum([
-      "active",
-      "pending",
-      "initializing",
-      "moved",
-      "deleted",
-      "deactivated",
-    ])
-    .optional(),
+  status: z.enum(ZONE_STATUSES).optional(),
 });
 
 export const GetZoneSchema = z

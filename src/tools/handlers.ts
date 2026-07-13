@@ -3,7 +3,12 @@
  */
 
 import { CloudflareClient } from "../cloudflare/client.js";
-import type { DNSRecordType, ZoneSummary, DNSRecordSummary } from "../cloudflare/types.js";
+import type {
+  DNSRecordType,
+  Zone,
+  ZoneSummary,
+  DNSRecordSummary,
+} from "../cloudflare/types.js";
 import { formatError, formatSuccess } from "../utils/errors.js";
 import {
   AddZoneSchema,
@@ -16,27 +21,29 @@ import {
   DeleteDNSRecordSchema,
   FindDNSRecordsSchema,
   BackupDNSRecordsSchema,
+  DNS_RECORD_TYPES,
 } from "./schemas.js";
 import type { DNSRecordBackup, ZoneBackup, FullBackup } from "./types.js";
 import { PAGINATION_LIMITS } from "./types.js";
 
 // ==================== Helper Functions ====================
 
-function summarizeZone(zone: {
-  id: string;
-  name: string;
-  status: string;
-  name_servers: string[];
-  plan: { name: string };
-  created_on: string;
-  modified_on: string;
-}): ZoneSummary {
+/** Runtime guard for backups: only record types create_dns_record can restore. */
+const RESTORABLE_RECORD_TYPES: ReadonlySet<string> = new Set(DNS_RECORD_TYPES);
+
+function summarizeZone(
+  zone: Pick<
+    Zone,
+    "id" | "name" | "status" | "name_servers" | "plan" | "created_on" | "modified_on"
+  >
+): ZoneSummary {
   return {
     id: zone.id,
     name: zone.name,
-    status: zone.status as ZoneSummary["status"],
+    status: zone.status,
     name_servers: zone.name_servers,
-    plan: zone.plan.name,
+    // plan is deprecated in the API and may disappear from responses
+    plan: zone.plan?.name ?? null,
     created_on: zone.created_on,
     modified_on: zone.modified_on,
   };
@@ -89,14 +96,7 @@ export async function handleAddZone(
 
   const zone = response.result;
   const result = formatSuccess(
-    {
-      id: zone.id,
-      name: zone.name,
-      status: zone.status,
-      name_servers: zone.name_servers,
-      plan: zone.plan.name,
-      created_on: zone.created_on,
-    },
+    summarizeZone(zone),
     `Successfully added zone "${input.name}". Update your domain's nameservers to: ${zone.name_servers.join(", ")}`
   );
 
@@ -162,11 +162,13 @@ export async function handleGetZoneDetails(
     type: zone.type,
     name_servers: zone.name_servers,
     original_name_servers: zone.original_name_servers,
-    plan: {
-      name: zone.plan.name,
-      price: zone.plan.price,
-      currency: zone.plan.currency,
-    },
+    plan: zone.plan
+      ? {
+          name: zone.plan.name ?? null,
+          price: zone.plan.price,
+          currency: zone.plan.currency,
+        }
+      : null,
     account: zone.account,
     created_on: zone.created_on,
     modified_on: zone.modified_on,
@@ -439,9 +441,11 @@ export async function handleBackupDNSRecords(
       });
 
       for (const record of recordsResponse.result) {
-        // Only backup user-manageable record types
-        // Skip SOA and some system records
-        if (record.type === "SOA") continue;
+        // Skip record types the tools cannot restore via create_dns_record
+        // (e.g. a system-managed SOA surfaced on some zone setups, or types
+        // newer than this server) — the compile-time enum cannot filter what
+        // the live API actually returns.
+        if (!RESTORABLE_RECORD_TYPES.has(record.type)) continue;
         if (records.length >= PAGINATION_LIMITS.MAX_RECORDS_PER_ZONE) break;
 
         const backupRecord: DNSRecordBackup = {

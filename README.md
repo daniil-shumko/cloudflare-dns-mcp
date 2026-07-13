@@ -165,7 +165,7 @@ List all domains (zones) on your Cloudflare account.
 | `page` | number | No | Page number (default: 1) |
 | `per_page` | number | No | Results per page, 5-50 (default: 50) |
 | `name` | string | No | Filter by domain name (partial match) |
-| `status` | string | No | Filter by status: `active`, `pending`, `initializing`, `moved`, `deleted`, `deactivated` |
+| `status` | string | No | Filter by status: `active`, `pending`, `initializing`, `moved` |
 
 **Example prompts:**
 - "List all my domains"
@@ -262,7 +262,7 @@ Create a new DNS record.
 | `name` | string | Yes | Record name (use `@` or domain for root) |
 | `content` | string | No** | Record content (IP, hostname, or text) for simple records |
 | `data` | object | No** | Structured data for records whose content is read-only, e.g. CAA `{ flags, tag, value }`, SRV, or HTTPS/SVCB params |
-| `ttl` | number | No | TTL in seconds: `1` = automatic (default), otherwise `60`–`86400` |
+| `ttl` | number | No | TTL in seconds: `1` = automatic (default), otherwise `60`–`86400` (minimum `30` on Enterprise zones) |
 | `proxied` | boolean | No | Enable Cloudflare proxy (default: false) |
 | `priority` | number | No | Priority for MX and URI records |
 | `comment` | string | No | Optional comment |
@@ -292,7 +292,7 @@ Update an existing DNS record. Only specify the fields you want to change.
 | `type` | string | No | New record type |
 | `name` | string | No | New record name |
 | `content` | string | No | New content |
-| `ttl` | number | No | New TTL (`1` = automatic, otherwise `60`–`86400`) |
+| `ttl` | number | No | New TTL (`1` = automatic, otherwise `60`–`86400`; minimum `30` on Enterprise zones) |
 | `proxied` | boolean | No | New proxy status |
 | `priority` | number | No | New priority (for MX and URI records) |
 | `comment` | string | No | New comment |

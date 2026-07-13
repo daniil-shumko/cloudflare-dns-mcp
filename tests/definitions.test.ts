@@ -22,6 +22,14 @@ describe("TOOLS definitions", () => {
     }
   });
 
+  it("all tools have a top-level title matching annotations.title", () => {
+    for (const tool of TOOLS) {
+      expect(typeof tool.title).toBe("string");
+      expect(tool.title.length).toBeGreaterThan(0);
+      expect(tool.title).toBe(tool.annotations.title);
+    }
+  });
+
   it("all tools have unique names", () => {
     const names = TOOLS.map((t) => t.name);
     const uniqueNames = new Set(names);

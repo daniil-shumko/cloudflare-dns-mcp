@@ -24,6 +24,7 @@ function createServer(cloudflare: CloudflareClient): Server {
   const server = new Server(
     {
       name: "cloudflare-dns",
+      title: "Cloudflare DNS",
       version: __SERVER_VERSION__,
     },
     {
