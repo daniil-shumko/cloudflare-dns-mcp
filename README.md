@@ -456,7 +456,7 @@ Add to your project's `.mcp.json`:
 
 Or use the CLI:
 ```bash
-claude mcp add cloudflare-dns npx cloudflare-dns-mcp
+claude mcp add cloudflare-dns --env CLOUDFLARE_API_TOKEN=your_token_here -- npx cloudflare-dns-mcp
 ```
 
 **Using local installation:**
@@ -502,7 +502,7 @@ claude mcp add cloudflare-dns npx cloudflare-dns-mcp
 
 ### Prerequisites
 
-- Node.js 20 or higher
+- Node.js 20 or higher (Node 22+ recommended — Node 20 reached end-of-life in April 2026)
 - npm or yarn
 
 ### Setup
@@ -537,6 +537,7 @@ npm run start         # Run the built server
 cloudflare-dns-mcp/
 ├── src/
 │   ├── index.ts              # MCP server entry point
+│   ├── globals.d.ts          # Build-time globals (__SERVER_VERSION__)
 │   ├── cloudflare/
 │   │   ├── client.ts         # Cloudflare API client
 │   │   └── types.ts          # TypeScript type definitions
@@ -553,6 +554,8 @@ cloudflare-dns-mcp/
 ├── dist/                     # Compiled JavaScript (generated)
 ├── package.json
 ├── tsconfig.json
+├── tsup.config.ts            # Build config (injects the package version)
+├── vitest.config.ts
 └── README.md
 ```
 
@@ -621,7 +624,7 @@ Cloudflare API has rate limits. If you're making many requests, you might see er
 
 ### Tool Permission Levels
 
-This MCP server uses [MCP Tool Annotations](https://spec.modelcontextprotocol.io) to indicate tool behavior and permission requirements:
+This MCP server uses [MCP Tool Annotations](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) to indicate tool behavior and permission requirements:
 
 | Tool | Read-Only | Destructive | Behavior |
 |------|-----------|-------------|----------|
