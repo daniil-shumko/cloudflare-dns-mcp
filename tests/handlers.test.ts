@@ -1,14 +1,17 @@
 /**
- * Tests for tool handlers: dispatcher behavior and that inputs are forwarded
- * to the Cloudflare client correctly (using a lightweight fake client).
+ * Tests for tool handlers: inputs (already validated by the SDK, so parsed
+ * here with the same schemas) are forwarded to the Cloudflare client correctly.
  */
 
 import { describe, it, expect } from "vitest";
 import {
-  handleToolCall,
   handleCreateDNSRecord,
   handleUpdateDNSRecord,
 } from "../src/tools/handlers.js";
+import {
+  CreateDNSRecordSchema,
+  UpdateDNSRecordSchema,
+} from "../src/tools/schemas.js";
 import type { CloudflareClient } from "../src/cloudflare/client.js";
 
 function dnsRecordResult(overrides: Record<string, unknown> = {}) {
@@ -38,32 +41,6 @@ function parseToolText(res: { content: Array<{ text: string }> }) {
   return JSON.parse(res.content[0].text);
 }
 
-describe("handleToolCall dispatcher", () => {
-  it("returns an error response for an unknown tool", async () => {
-    const fake = {} as unknown as CloudflareClient;
-    const res = await handleToolCall(fake, "does_not_exist", {});
-    expect(res.isError).toBe(true);
-    const body = parseToolText(res);
-    expect(body.error).toBe(true);
-    expect(body.message).toContain("Unknown tool");
-  });
-
-  it("treats omitted arguments as an empty object", async () => {
-    let captured: Record<string, unknown> | undefined;
-    const fake = {
-      listZones: async (params: Record<string, unknown>) => {
-        captured = params;
-        return { success: true, errors: [], messages: [], result: [] };
-      },
-    } as unknown as CloudflareClient;
-
-    const res = await handleToolCall(fake, "list_zones", undefined);
-    expect(res.isError).toBeUndefined();
-    expect(parseToolText(res).success).toBe(true);
-    expect(captured).toMatchObject({ page: 1, per_page: 50 });
-  });
-});
-
 describe("handleCreateDNSRecord", () => {
   it("forwards structured data (CAA) to the client", async () => {
     let captured: Record<string, unknown> | undefined;
@@ -74,12 +51,12 @@ describe("handleCreateDNSRecord", () => {
       },
     } as unknown as CloudflareClient;
 
-    await handleCreateDNSRecord(fake, {
+    await handleCreateDNSRecord(fake, CreateDNSRecordSchema.parse({
       zone_id: "abc123",
       type: "CAA",
       name: "example.com",
       data: { flags: 0, tag: "issue", value: "letsencrypt.org" },
-    });
+    }));
 
     expect(captured?.data).toEqual({ flags: 0, tag: "issue", value: "letsencrypt.org" });
     expect(captured?.type).toBe("CAA");
@@ -100,11 +77,11 @@ describe("handleUpdateDNSRecord", () => {
       },
     } as unknown as CloudflareClient;
 
-    await handleUpdateDNSRecord(fake, {
+    await handleUpdateDNSRecord(fake, UpdateDNSRecordSchema.parse({
       zone_id: "abc123",
       record_id: "rec1",
       priority: 20,
-    });
+    }));
 
     expect(captured?.priority).toBe(20);
   });
@@ -122,11 +99,11 @@ describe("handleUpdateDNSRecord", () => {
       },
     } as unknown as CloudflareClient;
 
-    await handleUpdateDNSRecord(fake, {
+    await handleUpdateDNSRecord(fake, UpdateDNSRecordSchema.parse({
       zone_id: "abc123",
       record_id: "rec1",
       content: "5.6.7.8",
-    });
+    }));
 
     expect(captured).toEqual({ content: "5.6.7.8" });
     expect("priority" in (captured ?? {})).toBe(false);
@@ -146,12 +123,12 @@ describe("handleUpdateDNSRecord", () => {
       },
     } as unknown as CloudflareClient;
 
-    await handleUpdateDNSRecord(fake, {
+    await handleUpdateDNSRecord(fake, UpdateDNSRecordSchema.parse({
       zone_id: "abc123",
       record_id: "rec1",
       type: "A",
       content: "5.6.7.8",
-    });
+    }));
 
     expect(captured).toEqual({ content: "5.6.7.8" });
   });
@@ -187,12 +164,12 @@ describe("handleUpdateDNSRecord", () => {
       },
     } as unknown as CloudflareClient;
 
-    const res = await handleUpdateDNSRecord(fake, {
+    const res = await handleUpdateDNSRecord(fake, UpdateDNSRecordSchema.parse({
       zone_id: "abc123",
       record_id: "rec1",
       type: "TXT",
       content: "hello",
-    });
+    }));
 
     expect(patched).toBe(false);
     expect(captured).toEqual({
@@ -223,11 +200,11 @@ describe("handleUpdateDNSRecord", () => {
       },
     } as unknown as CloudflareClient;
 
-    const res = await handleUpdateDNSRecord(fake, {
+    const res = await handleUpdateDNSRecord(fake, UpdateDNSRecordSchema.parse({
       zone_id: "abc123",
       record_id: "rec1",
       type: "AAAA",
-    });
+    }));
 
     expect(res.isError).toBe(true);
     expect(parseToolText(res).code).toBe("VALIDATION_ERROR");

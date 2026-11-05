@@ -538,15 +538,16 @@ npm run start         # Run the built server
 ```
 cloudflare-dns-mcp/
 ├── src/
-│   ├── index.ts              # MCP server entry point
+│   ├── index.ts              # stdio entry point
+│   ├── server.ts             # McpServer setup and tool registration
 │   ├── globals.d.ts          # Build-time globals (__SERVER_VERSION__)
 │   ├── cloudflare/
 │   │   ├── client.ts         # Cloudflare API client
 │   │   └── types.ts          # TypeScript type definitions
 │   ├── tools/
 │   │   ├── index.ts          # Tools module exports
-│   │   ├── schemas.ts        # Zod validation schemas
-│   │   ├── definitions.ts    # MCP tool definitions
+│   │   ├── schemas.ts        # Zod input schemas (source of the published JSON Schema)
+│   │   ├── definitions.ts    # Tool registry: metadata, annotations, handlers
 │   │   ├── handlers.ts       # Tool implementations
 │   │   └── types.ts          # Tool-specific types
 │   └── utils/
