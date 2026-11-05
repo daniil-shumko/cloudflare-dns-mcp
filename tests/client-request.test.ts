@@ -125,6 +125,89 @@ describe("CloudflareClient.request", () => {
   });
 });
 
+describe("CloudflareClient rate limits and batch", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("captures the retry-after header on a 429", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              success: false,
+              errors: [{ code: 10000, message: "Rate limited" }],
+              messages: [],
+              result: null,
+            }),
+            { status: 429, headers: { "retry-after": "42" } }
+          )
+      )
+    );
+    const client = new CloudflareClient("token");
+    const err = await client.listZones().catch((e) => e);
+    expect(err).toBeInstanceOf(CloudflareAPIError);
+    expect(err.retryAfter).toBe(42);
+  });
+
+  it("keeps documentation_url from API errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFetch(
+        JSON.stringify({
+          success: false,
+          errors: [
+            {
+              code: 10000,
+              message: "Authentication error",
+              documentation_url: "https://developers.cloudflare.com/x",
+            },
+          ],
+          messages: [],
+          result: null,
+        }),
+        403
+      )
+    );
+    const client = new CloudflareClient("token");
+    const err = await client.listZones().catch((e) => e);
+    expect(err.errors[0].documentation_url).toBe(
+      "https://developers.cloudflare.com/x"
+    );
+  });
+
+  it("POSTs batch changes to the zone's dns_records/batch endpoint", async () => {
+    const fetchMock = vi.fn(
+      async (_url: string, _init?: RequestInit) =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            errors: [],
+            messages: [],
+            result: { deletes: [], posts: [] },
+          }),
+          { status: 200 }
+        )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new CloudflareClient("token");
+    const batch = {
+      deletes: [{ id: "rec1" }],
+      posts: [{ type: "AAAA" as const, name: "www", content: "::1" }],
+    };
+    await client.batchDNSRecords("0123456789abcdef0123456789abcdef", batch);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "https://api.cloudflare.com/client/v4/zones/0123456789abcdef0123456789abcdef/dns_records/batch"
+    );
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual(batch);
+  });
+});
+
 describe("CloudflareClient.resolveZoneId (domain-name path)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

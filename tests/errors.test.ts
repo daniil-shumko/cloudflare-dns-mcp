@@ -60,6 +60,33 @@ describe("formatError", () => {
     expect(result.suggestion).toContain("Rate limit");
   });
 
+  it("gives rate-limit advice for a 429 even when the code overlaps auth (10000)", () => {
+    const error = new CloudflareAPIError(
+      [{ code: 10000, message: "Rate limited" }],
+      429,
+      30
+    );
+    const result = formatError(error);
+
+    expect(result.suggestion).toBe("Rate limit exceeded. Retry after 30 second(s).");
+  });
+
+  it("surfaces Cloudflare's documentation_url", () => {
+    const error = new CloudflareAPIError(
+      [
+        {
+          code: 10000,
+          message: "Authentication error",
+          documentation_url: "https://developers.cloudflare.com/fundamentals/api/",
+        },
+      ],
+      403
+    );
+    expect(formatError(error).documentation_url).toBe(
+      "https://developers.cloudflare.com/fundamentals/api/"
+    );
+  });
+
   it("maps CNAME-coexistence (81053) to a CNAME-specific suggestion", () => {
     const error = new CloudflareAPIError(
       [{ code: 81053, message: "An A, AAAA, or CNAME record already exists" }],

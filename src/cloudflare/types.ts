@@ -173,10 +173,12 @@ export interface DNSRecordSettings {
   flatten_cname?: boolean;
 }
 
+/**
+ * SRV structured data. The service/protocol/name live in the record's
+ * top-level `name` (e.g. `_sip._tcp.example.com`); the old `data.service`,
+ * `data.proto` and `data.name` fields are deprecated and must not be sent.
+ */
 export interface SRVData {
-  service: string;
-  proto: string;
-  name: string;
   priority: number;
   weight: number;
   port: number;
@@ -247,6 +249,21 @@ export interface UpdateDNSRecordInput {
 // Delete response
 export interface DeleteResult {
   id: string;
+}
+
+// Batch DNS records (POST /zones/{zone_id}/dns_records/batch)
+export interface BatchDNSRecordsInput {
+  deletes?: Array<{ id: string }>;
+  patches?: Array<UpdateDNSRecordInput & { id: string }>;
+  puts?: Array<CreateDNSRecordInput & { id: string }>;
+  posts?: CreateDNSRecordInput[];
+}
+
+export interface BatchDNSRecordsResult {
+  deletes?: DNSRecord[];
+  patches?: DNSRecord[];
+  puts?: DNSRecord[];
+  posts?: DNSRecord[];
 }
 
 // Simplified output types for MCP tool responses

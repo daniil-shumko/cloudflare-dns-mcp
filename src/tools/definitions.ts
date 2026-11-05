@@ -228,7 +228,7 @@ const TOOL_DEFINITIONS = [
         data: {
           type: "object",
           description:
-            "Structured data for record types whose content is read-only, e.g. CAA { flags, tag, value }, SRV { service, proto, name, priority, weight, port, target }, or HTTPS/SVCB service parameters.",
+            "Structured data for record types whose content is read-only, e.g. CAA { flags, tag, value }, SRV { priority, weight, port, target } (put the service and protocol in 'name', e.g. '_sip._tcp'), or HTTPS/SVCB service parameters.",
         },
       },
       required: ["type", "name"],
@@ -244,7 +244,7 @@ const TOOL_DEFINITIONS = [
     name: "update_dns_record",
     title: "Update DNS Record",
     description:
-      "Update an existing DNS record (partial update). Only specify the fields you want to change.",
+      "Update an existing DNS record (partial update). Only specify the fields you want to change. Changing 'type' replaces the record: Cloudflare does not allow in-place type changes, so the old record is deleted and a new one created in a single atomic batch, and the record gets a new ID.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -259,7 +259,8 @@ const TOOL_DEFINITIONS = [
         type: {
           type: "string",
           enum: RECORD_TYPE_ENUM,
-          description: "New record type (usually not changed)",
+          description:
+            "New record type. Changing it replaces the record with a new ID and requires new 'content' (or 'data'); name, TTL, comment and tags carry over unless given.",
         },
         name: {
           type: "string",

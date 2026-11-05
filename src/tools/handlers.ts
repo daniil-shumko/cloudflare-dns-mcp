@@ -4,6 +4,8 @@
 
 import { CloudflareClient } from "../cloudflare/client.js";
 import type {
+  CreateDNSRecordInput,
+  DNSRecord,
   DNSRecordType,
   Zone,
   ZoneSummary,
@@ -271,14 +273,52 @@ export async function handleCreateDNSRecord(
   };
 }
 
+/** Record types Cloudflare can proxy (orange cloud). */
+const PROXIABLE_TYPES: ReadonlySet<string> = new Set(["A", "AAAA", "CNAME"]);
+/** Record types that take a top-level `priority`. */
+const PRIORITY_TYPES: ReadonlySet<string> = new Set(["MX", "URI"]);
+
+function validationErrorResponse(details: string): ToolResponse {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          {
+            error: true,
+            code: "VALIDATION_ERROR",
+            message: "Invalid input parameters",
+            details,
+          },
+          null,
+          2
+        ),
+      },
+    ],
+    isError: true,
+  };
+}
+
 export async function handleUpdateDNSRecord(
   cloudflare: CloudflareClient,
   args: unknown
 ): Promise<ToolResponse> {
   const input = UpdateDNSRecordSchema.parse(args);
 
+  // Cloudflare no longer supports changing a record's type in place
+  // (PATCH/PUT, end-of-life 2026-06-30). A type change is applied as an
+  // atomic batch delete + create instead, which gives the record a new ID.
+  if (input.type !== undefined) {
+    const existing = (
+      await cloudflare.getDNSRecord(input.zone_id, input.record_id)
+    ).result;
+
+    if (input.type !== existing.type) {
+      return replaceDNSRecordWithNewType(cloudflare, input, existing);
+    }
+  }
+
   const updateData: Record<string, unknown> = {};
-  if (input.type !== undefined) updateData.type = input.type;
   if (input.name !== undefined) updateData.name = input.name;
   if (input.content !== undefined) updateData.content = input.content;
   if (input.ttl !== undefined) updateData.ttl = input.ttl;
@@ -297,6 +337,66 @@ export async function handleUpdateDNSRecord(
   const result = formatSuccess(
     summarizeDNSRecord(response.result),
     `Successfully updated DNS record ${input.record_id}`
+  );
+
+  return {
+    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+  };
+}
+
+async function replaceDNSRecordWithNewType(
+  cloudflare: CloudflareClient,
+  input: ReturnType<typeof UpdateDNSRecordSchema.parse>,
+  existing: DNSRecord
+): Promise<ToolResponse> {
+  const newType = input.type as DNSRecordType;
+
+  // The old content is almost never valid for a different type (an IPv4
+  // address is not a valid AAAA or CNAME target), so require it explicitly.
+  if (input.content === undefined && input.data === undefined) {
+    return validationErrorResponse(
+      `Changing the record type from ${existing.type} to ${newType} requires new content (or data for structured records).`
+    );
+  }
+
+  // Carry over the type-independent fields; type-specific ones (proxied,
+  // priority) only when the new type supports them.
+  const newRecord: CreateDNSRecordInput = {
+    type: newType,
+    name: input.name ?? existing.name,
+    ttl: input.ttl ?? existing.ttl,
+    ...(input.content !== undefined && { content: input.content }),
+    ...(input.data !== undefined && { data: input.data }),
+  };
+  if (PROXIABLE_TYPES.has(newType)) {
+    newRecord.proxied = input.proxied ?? existing.proxied;
+  } else if (input.proxied !== undefined) {
+    newRecord.proxied = input.proxied;
+  }
+  const priority =
+    input.priority ??
+    (PRIORITY_TYPES.has(newType) ? existing.priority : undefined);
+  if (priority !== undefined) newRecord.priority = priority;
+  const comment = input.comment ?? existing.comment;
+  if (comment) newRecord.comment = comment;
+  const tags = input.tags ?? existing.tags;
+  if (tags && tags.length > 0) newRecord.tags = tags;
+
+  const response = await cloudflare.batchDNSRecords(input.zone_id, {
+    deletes: [{ id: existing.id }],
+    posts: [newRecord],
+  });
+
+  const created = response.result.posts?.[0];
+  if (!created) {
+    throw new Error(
+      "Cloudflare accepted the batch but returned no created record; check the zone with find_dns_records."
+    );
+  }
+
+  const result = formatSuccess(
+    { ...summarizeDNSRecord(created), replaced_record_id: existing.id },
+    `Changed record type from ${existing.type} to ${newType} by replacing record ${existing.id} with ${created.id} (Cloudflare does not allow in-place type changes; the record ID has changed)`
   );
 
   return {

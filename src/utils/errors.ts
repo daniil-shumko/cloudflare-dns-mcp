@@ -10,6 +10,8 @@ export interface ToolErrorResponse {
   message: string;
   details?: string;
   suggestion?: string;
+  /** Cloudflare's link for the error (e.g. which permission a 403 needs). */
+  documentation_url?: string;
 }
 
 /**
@@ -17,6 +19,9 @@ export interface ToolErrorResponse {
  */
 export function formatError(error: unknown): ToolErrorResponse {
   if (error instanceof CloudflareAPIError) {
+    const documentationUrl = error.errors.find(
+      (e) => e.documentation_url
+    )?.documentation_url;
     return {
       error: true,
       code: `CF_${error.errors[0]?.code || "UNKNOWN"}`,
@@ -25,6 +30,7 @@ export function formatError(error: unknown): ToolErrorResponse {
         ? error.errors.map((e) => `[${e.code}] ${e.message}`).join("\n")
         : undefined,
       suggestion: getSuggestionForError(error),
+      ...(documentationUrl && { documentation_url: documentationUrl }),
     };
   }
 
@@ -49,6 +55,14 @@ export function formatError(error: unknown): ToolErrorResponse {
 function getSuggestionForError(error: CloudflareAPIError): string | undefined {
   const errorCode = error.errors[0]?.code;
   const errorMessage = error.errors[0]?.message?.toLowerCase() || "";
+
+  // Rate limiting — checked first because the HTTP status is unambiguous
+  // while error codes (e.g. 10000) overlap with authentication failures.
+  if (error.statusCode === 429) {
+    return error.retryAfter !== undefined
+      ? `Rate limit exceeded. Retry after ${error.retryAfter} second(s).`
+      : "Rate limit exceeded. Wait a moment before making more requests.";
+  }
 
   // Authentication / token problems (6003 = invalid request headers,
   // 9109/10000 = authentication errors)
@@ -96,10 +110,6 @@ function getSuggestionForError(error: CloudflareAPIError): string | undefined {
     errorMessage.includes("already exists")
   ) {
     return "A record with this name and type already exists. Use update_dns_record instead, or change the content.";
-  }
-
-  if (error.statusCode === 429) {
-    return "Rate limit exceeded. Wait a moment before making more requests.";
   }
 
   return undefined;

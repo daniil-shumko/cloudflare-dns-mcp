@@ -261,7 +261,7 @@ Create a new DNS record.
 | `type` | string | Yes | Record type: `A`, `AAAA`, `CNAME`, `TXT`, `MX`, `NS`, `SRV`, `CAA`, `HTTPS`, `SVCB`, `TLSA`, `SSHFP`, `URI`, and other standard types |
 | `name` | string | Yes | Record name (use `@` or domain for root) |
 | `content` | string | No** | Record content (IP, hostname, or text) for simple records |
-| `data` | object | No** | Structured data for records whose content is read-only, e.g. CAA `{ flags, tag, value }`, SRV, or HTTPS/SVCB params |
+| `data` | object | No** | Structured data for records whose content is read-only, e.g. CAA `{ flags, tag, value }`, SRV `{ priority, weight, port, target }` (service and protocol go in `name`, e.g. `_sip._tcp`), or HTTPS/SVCB params |
 | `ttl` | number | No | TTL in seconds: `1` = automatic (default), otherwise `60`–`86400` (minimum `30` on Enterprise zones) |
 | `proxied` | boolean | No | Enable Cloudflare proxy (default: false) |
 | `priority` | number | No | Priority for MX and URI records |
@@ -284,12 +284,14 @@ Create a new DNS record.
 
 Update an existing DNS record. Only specify the fields you want to change.
 
+> **Changing the record type** replaces the record. Cloudflare no longer allows in-place type changes (end-of-life 2026-06-30), so the server deletes the old record and creates the new one in a single atomic [batch](https://developers.cloudflare.com/dns/manage-dns-records/how-to/batch-record-changes/) request. The new record gets a **new ID** (the response includes `replaced_record_id`), new `content` (or `data`) is required, and name, TTL, comment and tags carry over unless you set them.
+
 **Parameters:**
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `zone_id` | string | Yes | The zone ID |
 | `record_id` | string | Yes | The DNS record ID to update |
-| `type` | string | No | New record type |
+| `type` | string | No | New record type (replaces the record; see note above) |
 | `name` | string | No | New record name |
 | `content` | string | No | New content |
 | `ttl` | number | No | New TTL (`1` = automatic, otherwise `60`–`86400`; minimum `30` on Enterprise zones) |
@@ -609,7 +611,7 @@ Your API token needs both permissions:
 
 ### Rate limiting
 
-Cloudflare API has rate limits. If you're making many requests, you might see errors. Wait a moment and try again.
+The Cloudflare API allows 1,200 requests per 5 minutes per token. When a request is rate limited, the error's `suggestion` includes how long to wait (from Cloudflare's `retry-after` header).
 
 ---
 

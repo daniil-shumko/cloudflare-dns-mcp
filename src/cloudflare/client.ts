@@ -5,6 +5,7 @@
 
 import type {
   CloudflareResponse,
+  CloudflareError,
   Zone,
   DNSRecord,
   ListZonesParams,
@@ -12,22 +13,35 @@ import type {
   CreateDNSRecordInput,
   UpdateDNSRecordInput,
   DeleteResult,
+  BatchDNSRecordsInput,
+  BatchDNSRecordsResult,
 } from "./types.js";
 
 export class CloudflareAPIError extends Error {
-  public readonly errors: Array<{ code: number; message: string }>;
+  public readonly errors: CloudflareError[];
   public readonly statusCode?: number;
+  /** Seconds to wait before retrying, from the `retry-after` header (429s). */
+  public readonly retryAfter?: number;
 
   constructor(
-    errors: Array<{ code: number; message: string }>,
-    statusCode?: number
+    errors: CloudflareError[],
+    statusCode?: number,
+    retryAfter?: number
   ) {
     const message = errors.map((e) => `[${e.code}] ${e.message}`).join("; ");
     super(message);
     this.name = "CloudflareAPIError";
     this.errors = errors;
     this.statusCode = statusCode;
+    this.retryAfter = retryAfter;
   }
+}
+
+/** Parse a `retry-after` header given in seconds; HTTP-date values are ignored. */
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
 }
 
 export class CloudflareClient {
@@ -77,6 +91,7 @@ export class CloudflareClient {
     // a structured CloudflareAPIError carrying the HTTP status rather than an
     // opaque SyntaxError from response.json().
     const rawBody = await response.text();
+    const retryAfter = parseRetryAfter(response.headers.get("retry-after"));
     let data: CloudflareResponse<T> | undefined;
 
     if (rawBody) {
@@ -90,7 +105,8 @@ export class CloudflareClient {
               message: `Cloudflare returned a non-JSON response (HTTP ${response.status} ${response.statusText}): ${rawBody.slice(0, 200)}`,
             },
           ],
-          response.status
+          response.status,
+          retryAfter
         );
       }
     }
@@ -103,7 +119,8 @@ export class CloudflareClient {
             message: `Empty response from Cloudflare (HTTP ${response.status} ${response.statusText})`,
           },
         ],
-        response.status
+        response.status,
+        retryAfter
       );
     }
 
@@ -118,7 +135,7 @@ export class CloudflareClient {
                   response.statusText || "Unknown Cloudflare API error",
               },
             ];
-      throw new CloudflareAPIError(errors, response.status);
+      throw new CloudflareAPIError(errors, response.status, retryAfter);
     }
 
     return data;
@@ -310,6 +327,21 @@ export class CloudflareClient {
     return this.request<DeleteResult>(
       "DELETE",
       `/zones/${zoneId}/dns_records/${recordId}`
+    );
+  }
+
+  /**
+   * Apply several DNS record changes in one transaction: deletes, then patches,
+   * then puts, then posts. If any operation fails, none are applied.
+   */
+  async batchDNSRecords(
+    zoneId: string,
+    batch: BatchDNSRecordsInput
+  ): Promise<CloudflareResponse<BatchDNSRecordsResult>> {
+    return this.request<BatchDNSRecordsResult>(
+      "POST",
+      `/zones/${zoneId}/dns_records/batch`,
+      batch
     );
   }
 
