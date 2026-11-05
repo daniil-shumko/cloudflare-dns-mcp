@@ -64,6 +64,14 @@ function getSuggestionForError(error: CloudflareAPIError): string | undefined {
       : "Rate limit exceeded. Wait a moment before making more requests.";
   }
 
+  // A valid token without permission for this zone/resource: Cloudflare
+  // answers 403 with code 10000 ("Authentication error"), whereas an invalid
+  // token gets 401/10000, 403/9109 ("Invalid access token") or 400/6003.
+  // Common with account-owned tokens scoped to specific zones.
+  if (error.statusCode === 403 && errorCode === 10000) {
+    return "Your CLOUDFLARE_API_TOKEN is valid but not permitted to access this resource. Check that the token's zone resources include this zone and that it has Zone.DNS:Read (or Edit; Zone.Zone:Edit for add_zone).";
+  }
+
   // Authentication / token problems (6003 = invalid request headers,
   // 9109/10000 = authentication errors)
   if (

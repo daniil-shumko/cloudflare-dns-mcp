@@ -71,6 +71,33 @@ describe("formatError", () => {
     expect(result.suggestion).toBe("Rate limit exceeded. Retry after 30 second(s).");
   });
 
+  it("treats 403 + 10000 as missing permission, not a bad token", () => {
+    // Observed live: a valid zone-scoped token reading DNS on another zone.
+    const error = new CloudflareAPIError(
+      [{ code: 10000, message: "Authentication error" }],
+      403
+    );
+    const suggestion = formatError(error).suggestion ?? "";
+    expect(suggestion).toMatch(/valid but not permitted/);
+    expect(suggestion).toMatch(/zone resources/);
+  });
+
+  it("still treats 401 + 10000 (invalid token) as a token problem", () => {
+    const error = new CloudflareAPIError(
+      [{ code: 10000, message: "Authentication error" }],
+      401
+    );
+    expect(formatError(error).suggestion).toMatch(/correct, active, and has not expired/);
+  });
+
+  it("still treats 403 + 9109 'Invalid access token' as a token problem", () => {
+    const error = new CloudflareAPIError(
+      [{ code: 9109, message: "Invalid access token" }],
+      403
+    );
+    expect(formatError(error).suggestion).toMatch(/correct, active, and has not expired/);
+  });
+
   it("surfaces Cloudflare's documentation_url", () => {
     const error = new CloudflareAPIError(
       [
