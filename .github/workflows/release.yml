@@ -35,8 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Lets npm authenticate via trusted publishing (OIDC) once it is configured
-      # for this package on npmjs.com; npm falls back to NODE_AUTH_TOKEN otherwise.
+      # Required for npm trusted publishing (OIDC) and provenance
       id-token: write
     steps:
       - name: Checkout repository
@@ -57,9 +56,8 @@ jobs:
         run: npm run build
 
       - name: Publish to npm
+        # Authenticates via npm trusted publishing (OIDC); no token is used.
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   github-release:
     needs: test

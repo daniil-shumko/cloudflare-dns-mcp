@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/cloudflare-dns-mcp.svg)](https://www.npmjs.com/package/cloudflare-dns-mcp)
 [![Tests](https://github.com/daniil-shumko/cloudflare-dns-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/daniil-shumko/cloudflare-dns-mcp/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io)
 
 > ⚠️ **Security Warning**
@@ -506,7 +506,7 @@ claude mcp add cloudflare-dns --env CLOUDFLARE_API_TOKEN=your_token_here -- npx 
 
 ### Prerequisites
 
-- Node.js 20 or higher (Node 22+ recommended — Node 20 reached end-of-life in April 2026)
+- Node.js 22 or higher
 - npm or yarn
 
 ### Setup
