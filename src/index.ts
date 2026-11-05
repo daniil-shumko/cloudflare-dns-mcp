@@ -26,6 +26,9 @@ function createServer(cloudflare: CloudflareClient): Server {
       name: "cloudflare-dns",
       title: "Cloudflare DNS",
       version: __SERVER_VERSION__,
+      description:
+        "Manage Cloudflare zones and DNS records: list, inspect, create, update, delete, find, and back up.",
+      websiteUrl: "https://github.com/daniil-shumko/cloudflare-dns-mcp",
     },
     {
       capabilities: {

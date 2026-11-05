@@ -47,6 +47,21 @@ describe("handleToolCall dispatcher", () => {
     expect(body.error).toBe(true);
     expect(body.message).toContain("Unknown tool");
   });
+
+  it("treats omitted arguments as an empty object", async () => {
+    let captured: Record<string, unknown> | undefined;
+    const fake = {
+      listZones: async (params: Record<string, unknown>) => {
+        captured = params;
+        return { success: true, errors: [], messages: [], result: [] };
+      },
+    } as unknown as CloudflareClient;
+
+    const res = await handleToolCall(fake, "list_zones", undefined);
+    expect(res.isError).toBeUndefined();
+    expect(parseToolText(res).success).toBe(true);
+    expect(captured).toMatchObject({ page: 1, per_page: 50 });
+  });
 });
 
 describe("handleCreateDNSRecord", () => {

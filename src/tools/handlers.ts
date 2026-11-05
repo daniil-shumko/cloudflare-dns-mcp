@@ -564,5 +564,7 @@ export async function handleToolCall(
     };
   }
 
-  return handler(cloudflare, args);
+  // `arguments` is optional in tools/call; treat an omitted value as `{}` so
+  // tools whose inputs are all optional (list_zones, backup_dns_records) work.
+  return handler(cloudflare, args ?? {});
 }
