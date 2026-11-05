@@ -3,55 +3,55 @@
  *
  * The SDK validates every successful result against these before sending it,
  * and a mismatch turns the call into an error — so they are deliberately
- * lenient: only identifying fields are required, everything Cloudflare might
- * omit is optional/nullable, and unknown keys are allowed (looseObject) so a
- * new API field can never break a working tool. They describe the shape for
- * clients; they are not a strict contract on Cloudflare's responses.
+ * lenient: only identifying fields are required, every other field may be
+ * absent or null (`nullish`), and unknown keys are allowed (looseObject) so a
+ * new or sparse API field can never break a working tool. They describe the
+ * shape for clients; they are not a strict contract on Cloudflare's responses.
  */
 
 import { z } from "zod";
 
 const paginationSchema = z
   .looseObject({
-    page: z.number().optional(),
-    per_page: z.number().optional(),
-    total_pages: z.number().optional(),
-    total_count: z.number().optional(),
+    page: z.number().nullish(),
+    per_page: z.number().nullish(),
+    total_pages: z.number().nullish(),
+    total_count: z.number().nullish(),
   })
-  .optional()
+  .nullish()
   .describe("Pagination info from Cloudflare, when returned");
 
 const zoneSummarySchema = z.looseObject({
   id: z.string(),
   name: z.string(),
-  status: z.string().optional(),
-  name_servers: z.array(z.string()).optional(),
-  plan: z.string().nullable().optional(),
-  created_on: z.string().optional(),
-  modified_on: z.string().optional(),
+  status: z.string().nullish(),
+  name_servers: z.array(z.string()).nullish(),
+  plan: z.string().nullish(),
+  created_on: z.string().nullish(),
+  modified_on: z.string().nullish(),
 });
 
 const dnsRecordSummarySchema = z.looseObject({
   id: z.string(),
   type: z.string(),
   name: z.string(),
-  content: z.string().optional(),
-  proxied: z.boolean().optional(),
+  content: z.string().nullish(),
+  proxied: z.boolean().nullish(),
   ttl: z
     .union([z.number(), z.literal("auto")])
-    .optional()
+    .nullish()
     .describe("TTL in seconds, or 'auto' for Cloudflare's automatic TTL"),
-  priority: z.number().optional(),
-  comment: z.string().nullable().optional(),
-  created_on: z.string().optional(),
-  modified_on: z.string().optional(),
+  priority: z.number().nullish(),
+  comment: z.string().nullish(),
+  created_on: z.string().nullish(),
+  modified_on: z.string().nullish(),
 });
 
 /** The `{ success, message?, data }` envelope every successful tool returns. */
 function successEnvelope<T extends z.ZodType>(data: T) {
   return z.looseObject({
     success: z.literal(true),
-    message: z.string().optional(),
+    message: z.string().nullish(),
     data,
   });
 }
@@ -65,21 +65,20 @@ export const ListZonesOutputSchema = successEnvelope(
 
 export const GetZoneDetailsOutputSchema = successEnvelope(
   zoneSummarySchema.extend({
-    paused: z.boolean().optional(),
-    type: z.string().optional(),
-    original_name_servers: z.array(z.string()).nullable().optional(),
+    paused: z.boolean().nullish(),
+    type: z.string().nullish(),
+    original_name_servers: z.array(z.string()).nullish(),
     plan: z
       .looseObject({
-        name: z.string().nullable().optional(),
-        price: z.number().optional(),
-        currency: z.string().optional(),
+        name: z.string().nullish(),
+        price: z.number().nullish(),
+        currency: z.string().nullish(),
       })
-      .nullable()
-      .optional(),
+      .nullish(),
     account: z
-      .looseObject({ id: z.string().optional(), name: z.string().optional() })
-      .optional(),
-    activated_on: z.string().nullable().optional(),
+      .looseObject({ id: z.string().nullish(), name: z.string().nullish() })
+      .nullish(),
+    activated_on: z.string().nullish(),
   })
 );
 

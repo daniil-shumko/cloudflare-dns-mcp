@@ -21,7 +21,10 @@ function main() {
   // serveStdio negotiates the protocol era per connection, so the same server
   // serves both 2025-era clients (initialize handshake) and 2026-07-28+
   // clients (server/discover).
-  serveStdio(() => createServer(cloudflare));
+  serveStdio(() => createServer(cloudflare), {
+    // Out-of-band transport/handshake errors are otherwise dropped silently.
+    onerror: (error) => console.error("MCP transport error:", error),
+  });
 
   // All logging must go to stderr — stdout is reserved for the MCP protocol.
   console.error("Cloudflare DNS MCP Server started (stdio)");

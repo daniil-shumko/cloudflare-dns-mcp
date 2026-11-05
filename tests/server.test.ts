@@ -323,6 +323,31 @@ describe("structured output (read tools)", () => {
     });
   });
 
+  it("tolerates null in any non-identifying field", async () => {
+    stubCloudflare(() =>
+      ok({
+        id: "rec-null",
+        type: "A",
+        name: "www.example.com",
+        content: null,
+        priority: null,
+        proxied: null,
+        ttl: 1,
+        comment: null,
+        created_on: null,
+        modified_on: null,
+      })
+    );
+    const result = await client.callTool({
+      name: "get_dns_record",
+      arguments: { zone_id: ZONE_ID, record_id: "rec-null" },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      data: { id: "rec-null", priority: null },
+    });
+  });
+
   it("does not attach structuredContent to error results", async () => {
     stubCloudflare(() => ({
       status: 404,
