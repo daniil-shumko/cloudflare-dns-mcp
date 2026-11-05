@@ -202,3 +202,143 @@ describe("tools/call", () => {
     });
   });
 });
+
+describe("structured output (read tools)", () => {
+  const READ_TOOLS_WITH_OUTPUT = [
+    "list_zones",
+    "get_zone_details",
+    "list_dns_records",
+    "get_dns_record",
+    "find_dns_records",
+  ];
+
+  it("declares an outputSchema on exactly the read tools (not backup or writes)", async () => {
+    const { tools } = await client.listTools();
+    const withOutput = tools.filter((t) => t.outputSchema).map((t) => t.name);
+    expect(withOutput).toEqual(READ_TOOLS_WITH_OUTPUT);
+  });
+
+  it("returns structuredContent identical to the JSON text", async () => {
+    stubCloudflare(() =>
+      ok(
+        [
+          {
+            id: ZONE_ID,
+            name: "example.com",
+            status: "active",
+            name_servers: ["ns1.example.net"],
+            plan: { name: "Free Website" },
+            created_on: "2026-01-01T00:00:00Z",
+            modified_on: "2026-01-01T00:00:00Z",
+          },
+        ],
+        { page: 1, per_page: 50, total_pages: 1, count: 1, total_count: 1 }
+      )
+    );
+    const result = await client.callTool({ name: "list_zones", arguments: {} });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual(textOf(result));
+    expect(result.structuredContent).toMatchObject({
+      success: true,
+      data: { zones: [{ id: ZONE_ID, plan: "Free Website" }] },
+    });
+  });
+
+  it("tolerates sparse zones and unknown API fields", async () => {
+    // A partial (CNAME-setup) zone without plan/name_servers, plus a field
+    // this server has never seen — output validation must not reject it.
+    stubCloudflare(() =>
+      ok({
+        id: ZONE_ID,
+        name: "example.com",
+        status: "pending",
+        paused: false,
+        type: "partial",
+        original_name_servers: null,
+        account: { id: "acc", name: "Acme" },
+        created_on: "2026-01-01T00:00:00Z",
+        modified_on: "2026-01-01T00:00:00Z",
+        activated_on: null,
+        tenant: { id: "t1", name: "Tenant" },
+      })
+    );
+    const result = await client.callTool({
+      name: "get_zone_details",
+      arguments: { zone_id: ZONE_ID },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      data: { id: ZONE_ID, plan: null },
+    });
+  });
+
+  it("tolerates structured records (CAA) with null comments and extra fields", async () => {
+    stubCloudflare(() =>
+      ok([
+        {
+          id: "rec-caa",
+          type: "CAA",
+          name: "example.com",
+          content: '0 issue "letsencrypt.org"',
+          data: { flags: 0, tag: "issue", value: "letsencrypt.org" },
+          proxiable: false,
+          proxied: false,
+          ttl: 3600,
+          comment: null,
+          tags: [],
+          settings: {},
+          meta: {},
+          created_on: "2026-01-01T00:00:00Z",
+          modified_on: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "rec-mx",
+          type: "MX",
+          name: "example.com",
+          content: "mail.example.com",
+          priority: 10,
+          proxiable: false,
+          proxied: false,
+          ttl: 1,
+          comment: "primary mail",
+          tags: ["team:mail"],
+          meta: {},
+          created_on: "2026-01-01T00:00:00Z",
+          modified_on: "2026-01-01T00:00:00Z",
+        },
+      ])
+    );
+    const result = await client.callTool({
+      name: "list_dns_records",
+      arguments: { zone_id: ZONE_ID },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      data: {
+        records: [
+          { id: "rec-caa", ttl: 3600, comment: null },
+          { id: "rec-mx", ttl: "auto", priority: 10 },
+        ],
+      },
+    });
+  });
+
+  it("does not attach structuredContent to error results", async () => {
+    stubCloudflare(() => ({
+      status: 404,
+      body: {
+        success: false,
+        errors: [{ code: 81044, message: "Record does not exist." }],
+        messages: [],
+        result: null,
+      },
+    }));
+    const result = await client.callTool({
+      name: "get_dns_record",
+      arguments: { zone_id: ZONE_ID, record_id: "missing" },
+    });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(textOf(result).suggestion).toMatch(/not found/i);
+  });
+});

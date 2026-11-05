@@ -123,6 +123,8 @@ This MCP server provides 10 tools for DNS management:
 | `delete_dns_record` | Remove a DNS record |
 | `backup_dns_records` | Export records to JSON |
 
+Every tool returns its result as JSON text. The read tools (`list_zones`, `get_zone_details`, `list_dns_records`, `get_dns_record`, `find_dns_records`) also declare an [output schema](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#output-schema) and return the same data as `structuredContent`, so clients can consume it without parsing text.
+
 ---
 
 ## Tool Reference

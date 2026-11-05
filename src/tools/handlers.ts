@@ -86,6 +86,17 @@ export interface ToolResponse {
   [key: string]: unknown;
 }
 
+/**
+ * A result carrying the same JSON both as text (for every client) and as
+ * structuredContent (validated by the SDK against the tool's outputSchema).
+ */
+function structuredResult(result: object): ToolResponse {
+  return {
+    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+    structuredContent: result as Record<string, unknown>,
+  };
+}
+
 // ==================== Tool Handlers ====================
 
 export async function handleAddZone(
@@ -134,9 +145,7 @@ export async function handleListZones(
     `Found ${zones.length} zone(s)`
   );
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleGetZoneDetails(
@@ -175,9 +184,7 @@ export async function handleGetZoneDetails(
     activated_on: zone.activated_on,
   });
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleListDNSRecords(
@@ -216,9 +223,7 @@ export async function handleListDNSRecords(
     `Found ${records.length} DNS record(s)`
   );
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleGetDNSRecord(
@@ -229,9 +234,7 @@ export async function handleGetDNSRecord(
 
   const result = formatSuccess(summarizeDNSRecord(response.result));
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleCreateDNSRecord(
@@ -457,9 +460,7 @@ export async function handleFindDNSRecords(
     `Found ${records.length} matching record(s) for "${input.record_name}"`
   );
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleBackupDNSRecords(

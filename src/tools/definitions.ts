@@ -10,6 +10,7 @@ import type { z } from "zod";
 
 import type { CloudflareClient } from "../cloudflare/client.js";
 import * as handlers from "./handlers.js";
+import * as outputs from "./outputs.js";
 import type { ToolResponse } from "./handlers.js";
 import * as schemas from "./schemas.js";
 
@@ -72,6 +73,7 @@ export const TOOLS: ToolDefinition[] = [
     description:
       "List all domains (zones) on your Cloudflare account. Returns zone IDs, domain names, status, and nameservers.",
     inputSchema: schemas.ListZonesSchema,
+    outputSchema: outputs.ListZonesOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -86,6 +88,7 @@ export const TOOLS: ToolDefinition[] = [
     description:
       "Get detailed information about a specific domain/zone including nameservers, plan, and settings. Provide either zone_id or domain_name.",
     inputSchema: schemas.GetZoneSchema,
+    outputSchema: outputs.GetZoneDetailsOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -100,6 +103,7 @@ export const TOOLS: ToolDefinition[] = [
     description:
       "List all DNS records for a domain. Returns record types, names, content, TTL, and proxy status. Provide either zone_id or domain_name.",
     inputSchema: schemas.ListDNSRecordsSchema,
+    outputSchema: outputs.ListDNSRecordsOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -114,6 +118,7 @@ export const TOOLS: ToolDefinition[] = [
     description:
       "Get details of a specific DNS record by its ID.",
     inputSchema: schemas.GetDNSRecordSchema,
+    outputSchema: outputs.GetDNSRecordOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -170,6 +175,7 @@ export const TOOLS: ToolDefinition[] = [
     description:
       "Find DNS records by name to get their record IDs. Useful before updating or deleting records when you know the name but not the ID. Returns matching records with their IDs.",
     inputSchema: schemas.FindDNSRecordsSchema,
+    outputSchema: outputs.FindDNSRecordsOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
