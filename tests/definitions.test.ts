@@ -3,7 +3,18 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import { TOOLS } from "../src/tools/definitions.js";
+
+/** The JSON Schema clients see for a tool's input (what the SDK publishes). */
+function inputJsonSchema(name: string) {
+  const tool = TOOLS.find((t) => t.name === name)!;
+  return z.toJSONSchema(tool.inputSchema, { io: "input" }) as {
+    type?: string;
+    required?: string[];
+    properties?: Record<string, { enum?: string[]; description?: string }>;
+  };
+}
 
 describe("TOOLS definitions", () => {
   it("exports 10 tools", () => {
@@ -16,8 +27,8 @@ describe("TOOLS definitions", () => {
       expect(typeof tool.name).toBe("string");
       expect(tool.description).toBeDefined();
       expect(typeof tool.description).toBe("string");
-      expect(tool.inputSchema).toBeDefined();
-      expect(tool.inputSchema.type).toBe("object");
+      expect(inputJsonSchema(tool.name).type).toBe("object");
+      expect(typeof tool.handler).toBe("function");
       expect(tool.annotations).toBeDefined();
     }
   });
@@ -91,23 +102,33 @@ describe("TOOLS definitions", () => {
 
   describe("input schemas", () => {
     it("required fields are specified", () => {
-      const addZone = TOOLS.find((t) => t.name === "add_zone");
-      expect(addZone?.inputSchema.required).toContain("name");
-      expect(addZone?.inputSchema.required).toContain("account_id");
+      expect(inputJsonSchema("add_zone").required).toEqual(["name", "account_id"]);
+      expect(inputJsonSchema("get_dns_record").required).toEqual([
+        "zone_id",
+        "record_id",
+      ]);
+    });
 
-      const getDns = TOOLS.find((t) => t.name === "get_dns_record");
-      expect(getDns?.inputSchema.required).toContain("zone_id");
-      expect(getDns?.inputSchema.required).toContain("record_id");
+    it("fields with defaults are optional for callers", () => {
+      expect(inputJsonSchema("list_zones").required ?? []).toEqual([]);
+      expect(inputJsonSchema("create_dns_record").required).toEqual(["type", "name"]);
     });
 
     it("DNS record types have enum constraints", () => {
-      const createRecord = TOOLS.find((t) => t.name === "create_dns_record");
-      const typeProperty = createRecord?.inputSchema.properties?.type as {
-        enum?: string[];
-      };
+      const typeProperty = inputJsonSchema("create_dns_record").properties?.type;
       expect(typeProperty?.enum).toContain("A");
       expect(typeProperty?.enum).toContain("CNAME");
       expect(typeProperty?.enum).toContain("TXT");
+    });
+
+    it("every input property has a description", () => {
+      for (const tool of TOOLS) {
+        for (const [prop, schema] of Object.entries(
+          inputJsonSchema(tool.name).properties ?? {}
+        )) {
+          expect(schema.description, `${tool.name}.${prop}`).toBeTruthy();
+        }
+      }
     });
   });
 });

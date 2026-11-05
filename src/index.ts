@@ -7,108 +7,33 @@
  * Communicates over stdio for Claude Desktop and Claude Code.
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
-import { CloudflareClient, CloudflareAPIError } from "./cloudflare/client.js";
+import { CloudflareClient } from "./cloudflare/client.js";
+import { createServer } from "./server.js";
+import { TOOLS } from "./tools/index.js";
 import { loadConfig } from "./utils/config.js";
-import { formatError } from "./utils/errors.js";
-import { TOOLS, handleToolCall } from "./tools/index.js";
 
-function createServer(cloudflare: CloudflareClient): Server {
-  const server = new Server(
-    {
-      name: "cloudflare-dns",
-      title: "Cloudflare DNS",
-      version: __SERVER_VERSION__,
-      description:
-        "Manage Cloudflare zones and DNS records: list, inspect, create, update, delete, find, and back up.",
-      websiteUrl: "https://github.com/daniil-shumko/cloudflare-dns-mcp",
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
-    }
-  );
-
-  // Register tool list handler
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: TOOLS };
-  });
-
-  // Register tool call handler
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-
-    try {
-      return await handleToolCall(cloudflare, name, args);
-    } catch (error) {
-      // Handle validation errors
-      if (error instanceof z.ZodError) {
-        const validationError = {
-          error: true,
-          code: "VALIDATION_ERROR",
-          message: "Invalid input parameters",
-          details: error.issues
-            .map((e) => `${e.path.join(".")}: ${e.message}`)
-            .join("; "),
-        };
-        return {
-          content: [
-            { type: "text", text: JSON.stringify(validationError, null, 2) },
-          ],
-          isError: true,
-        };
-      }
-
-      // Handle Cloudflare API errors
-      if (error instanceof CloudflareAPIError) {
-        return {
-          content: [
-            { type: "text", text: JSON.stringify(formatError(error), null, 2) },
-          ],
-          isError: true,
-        };
-      }
-
-      // Handle other errors
-      return {
-        content: [
-          { type: "text", text: JSON.stringify(formatError(error), null, 2) },
-        ],
-        isError: true,
-      };
-    }
-  });
-
-  return server;
-}
-
-async function main() {
-  // Load configuration
+function main() {
   const config = loadConfig();
-
-  // Initialize Cloudflare client
   const cloudflare = new CloudflareClient(config.apiToken);
 
-  // Connect over stdio (the transport used by Claude Desktop and Claude Code)
-  const server = createServer(cloudflare);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // serveStdio negotiates the protocol era per connection, so the same server
+  // serves both 2025-era clients (initialize handshake) and 2026-07-28+
+  // clients (server/discover).
+  serveStdio(() => createServer(cloudflare), {
+    // Out-of-band transport/handshake errors are otherwise dropped silently.
+    onerror: (error) => console.error("MCP transport error:", error),
+  });
 
   // All logging must go to stderr — stdout is reserved for the MCP protocol.
   console.error("Cloudflare DNS MCP Server started (stdio)");
   console.error("Tools available: " + TOOLS.map((t) => t.name).join(", "));
 }
 
-// Run the server
-main().catch((error) => {
+try {
+  main();
+} catch (error) {
   console.error("Fatal error:", error);
   process.exit(1);
-});
+}

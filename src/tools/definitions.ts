@@ -1,406 +1,201 @@
 /**
- * MCP Tool definitions with metadata and annotations
+ * MCP tool registry: metadata, annotations, input schema and handler per tool.
+ *
+ * Input schemas are the Zod schemas from ./schemas.ts — the SDK validates
+ * arguments against them and publishes their JSON Schema in tools/list, so
+ * there is no hand-written JSON Schema to keep in sync.
  */
 
-import { DNS_RECORD_TYPES, ZONE_STATUSES } from "./schemas.js";
+import type { z } from "zod";
 
-// Single source of truth for the record types and zone statuses the tools
-// accept (mirrors the Zod schemas so the advertised JSON Schema and
-// validation never drift).
-const RECORD_TYPE_ENUM = [...DNS_RECORD_TYPES];
-const ZONE_STATUS_ENUM = [...ZONE_STATUSES];
+import type { CloudflareClient } from "../cloudflare/client.js";
+import * as handlers from "./handlers.js";
+import * as outputs from "./outputs.js";
+import type { ToolResponse } from "./handlers.js";
+import * as schemas from "./schemas.js";
 
-const TOOL_DEFINITIONS = [
-  {
+export interface ToolAnnotations {
+  title: string;
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  openWorldHint: boolean;
+}
+
+export interface ToolDefinition<S extends z.ZodType = z.ZodType> {
+  name: string;
+  title: string;
+  description: string;
+  inputSchema: S;
+  /** Optional schema for structuredContent on successful results. */
+  outputSchema?: z.ZodType;
+  annotations: ToolAnnotations;
+  handler: (
+    cloudflare: CloudflareClient,
+    input: z.output<S>
+  ) => Promise<ToolResponse>;
+}
+
+/**
+ * Builds a tool definition, stamping the display title into
+ * annotations.title (the pre-2025-06-18 spec's fallback location) so the
+ * two can never drift, and tying the handler's input type to its schema.
+ */
+function defineTool<S extends z.ZodType>(
+  tool: Omit<ToolDefinition<S>, "annotations"> & {
+    annotations: Omit<ToolAnnotations, "title">;
+  }
+): ToolDefinition {
+  return {
+    ...tool,
+    annotations: { title: tool.title, ...tool.annotations },
+  } as ToolDefinition;
+}
+
+export const TOOLS: ToolDefinition[] = [
+  defineTool({
     name: "add_zone",
     title: "Add Zone to Cloudflare",
     description:
       "Add a new domain (zone) to your Cloudflare account. The domain's nameservers must be updated at your registrar to point to Cloudflare's nameservers after adding.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        name: {
-          type: "string",
-          description: "The domain name to add (e.g., 'example.com')",
-        },
-        account_id: {
-          type: "string",
-          description:
-            "Your Cloudflare account ID (found in dashboard URL or API)",
-        },
-        type: {
-          type: "string",
-          enum: ["full", "partial", "secondary", "internal"],
-          description:
-            "Zone type: 'full' (default) for full DNS management, 'partial' for CNAME setup, 'secondary' for secondary DNS, 'internal' for internal zones",
-        },
-      },
-      required: ["name", "account_id"],
-    },
+    inputSchema: schemas.AddZoneSchema,
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
     },
-  },
-  {
+    handler: handlers.handleAddZone,
+  }),
+  defineTool({
     name: "list_zones",
     title: "List Cloudflare Zones",
     description:
       "List all domains (zones) on your Cloudflare account. Returns zone IDs, domain names, status, and nameservers.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        page: {
-          type: "number",
-          description: "Page number for pagination (default: 1)",
-        },
-        per_page: {
-          type: "number",
-          description: "Number of zones per page, 5-50 (default: 50)",
-        },
-        name: {
-          type: "string",
-          description: "Filter by domain name (partial match supported)",
-        },
-        status: {
-          type: "string",
-          enum: ZONE_STATUS_ENUM,
-          description: "Filter by zone status",
-        },
-      },
-    },
+    inputSchema: schemas.ListZonesSchema,
+    outputSchema: outputs.ListZonesOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
     },
-  },
-  {
+    handler: handlers.handleListZones,
+  }),
+  defineTool({
     name: "get_zone_details",
     title: "Get Zone Details",
     description:
       "Get detailed information about a specific domain/zone including nameservers, plan, and settings. Provide either zone_id or domain_name.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        zone_id: {
-          type: "string",
-          description: "The zone ID (32-character hex string)",
-        },
-        domain_name: {
-          type: "string",
-          description: "The domain name (e.g., 'example.com')",
-        },
-      },
-    },
+    inputSchema: schemas.GetZoneSchema,
+    outputSchema: outputs.GetZoneDetailsOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
     },
-  },
-  {
+    handler: handlers.handleGetZoneDetails,
+  }),
+  defineTool({
     name: "list_dns_records",
     title: "List DNS Records",
     description:
       "List all DNS records for a domain. Returns record types, names, content, TTL, and proxy status. Provide either zone_id or domain_name.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        zone_id: {
-          type: "string",
-          description: "The zone ID",
-        },
-        domain_name: {
-          type: "string",
-          description: "The domain name (alternative to zone_id)",
-        },
-        type: {
-          type: "string",
-          enum: RECORD_TYPE_ENUM,
-          description: "Filter by record type",
-        },
-        name: {
-          type: "string",
-          description: "Filter by record name (e.g., 'www.example.com')",
-        },
-        page: {
-          type: "number",
-          description: "Page number (default: 1)",
-        },
-        per_page: {
-          type: "number",
-          description: "Results per page, max 100 (default: 100)",
-        },
-      },
-    },
+    inputSchema: schemas.ListDNSRecordsSchema,
+    outputSchema: outputs.ListDNSRecordsOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
     },
-  },
-  {
+    handler: handlers.handleListDNSRecords,
+  }),
+  defineTool({
     name: "get_dns_record",
     title: "Get DNS Record",
-    description: "Get details of a specific DNS record by its ID.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        zone_id: {
-          type: "string",
-          description: "The zone ID",
-        },
-        record_id: {
-          type: "string",
-          description: "The DNS record ID",
-        },
-      },
-      required: ["zone_id", "record_id"],
-    },
+    description:
+      "Get details of a specific DNS record by its ID.",
+    inputSchema: schemas.GetDNSRecordSchema,
+    outputSchema: outputs.GetDNSRecordOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
     },
-  },
-  {
+    handler: handlers.handleGetDNSRecord,
+  }),
+  defineTool({
     name: "create_dns_record",
     title: "Create DNS Record",
     description:
       "Create a new DNS record for a domain. Supports common types (A, AAAA, CNAME, TXT, MX, NS, SRV) via 'content', and structured types (CAA, HTTPS, SVCB, ...) via the 'data' object. Provide either zone_id or domain_name.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        zone_id: {
-          type: "string",
-          description: "The zone ID",
-        },
-        domain_name: {
-          type: "string",
-          description: "The domain name (alternative to zone_id)",
-        },
-        type: {
-          type: "string",
-          enum: RECORD_TYPE_ENUM,
-          description: "DNS record type",
-        },
-        name: {
-          type: "string",
-          description:
-            "DNS record name. Use '@' or the domain name for root, or specify subdomain (e.g., 'www', 'api')",
-        },
-        content: {
-          type: "string",
-          description:
-            "Record content: IP address for A/AAAA, hostname for CNAME/MX, text for TXT. Required for simple records; omit for structured records that use 'data' (e.g. CAA).",
-        },
-        ttl: {
-          type: "number",
-          description:
-            "TTL in seconds. Use 1 for automatic (default). Otherwise 60-86400 (minimum 30 for Enterprise zones).",
-        },
-        proxied: {
-          type: "boolean",
-          description:
-            "Whether to proxy traffic through Cloudflare (orange cloud). Only for A, AAAA, CNAME. Default: false",
-        },
-        priority: {
-          type: "number",
-          description:
-            "Priority for MX and URI records (required for those types)",
-        },
-        comment: {
-          type: "string",
-          description: "Optional comment for the record",
-        },
-        tags: {
-          type: "array",
-          items: { type: "string" },
-          description: "Optional custom tags for the record",
-        },
-        data: {
-          type: "object",
-          description:
-            "Structured data for record types whose content is read-only, e.g. CAA { flags, tag, value }, SRV { priority, weight, port, target } (put the service and protocol in 'name', e.g. '_sip._tcp'), or HTTPS/SVCB service parameters.",
-        },
-      },
-      required: ["type", "name"],
-    },
+    inputSchema: schemas.CreateDNSRecordSchema,
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: true,
     },
-  },
-  {
+    handler: handlers.handleCreateDNSRecord,
+  }),
+  defineTool({
     name: "update_dns_record",
     title: "Update DNS Record",
     description:
       "Update an existing DNS record (partial update). Only specify the fields you want to change. Changing 'type' replaces the record: Cloudflare does not allow in-place type changes, so the old record is deleted and a new one created in a single atomic batch, and the record gets a new ID.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        zone_id: {
-          type: "string",
-          description: "The zone ID",
-        },
-        record_id: {
-          type: "string",
-          description: "The DNS record ID to update",
-        },
-        type: {
-          type: "string",
-          enum: RECORD_TYPE_ENUM,
-          description:
-            "New record type. Changing it replaces the record with a new ID and requires new 'content' (or 'data'); name, TTL, comment and tags carry over unless given.",
-        },
-        name: {
-          type: "string",
-          description: "New record name",
-        },
-        content: {
-          type: "string",
-          description: "New record content",
-        },
-        ttl: {
-          type: "number",
-          description:
-            "New TTL in seconds (1 for automatic, otherwise 60-86400; minimum 30 for Enterprise zones)",
-        },
-        proxied: {
-          type: "boolean",
-          description: "New proxy status",
-        },
-        priority: {
-          type: "number",
-          description: "New priority (for MX and URI records)",
-        },
-        comment: {
-          type: "string",
-          description: "New comment",
-        },
-        tags: {
-          type: "array",
-          items: { type: "string" },
-          description: "New custom tags for the record",
-        },
-        data: {
-          type: "object",
-          description:
-            "New structured data for record types like CAA/SRV/HTTPS/SVCB (see create_dns_record).",
-        },
-      },
-      required: ["zone_id", "record_id"],
-    },
+    inputSchema: schemas.UpdateDNSRecordSchema,
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: true,
       openWorldHint: true,
     },
-  },
-  {
+    handler: handlers.handleUpdateDNSRecord,
+  }),
+  defineTool({
     name: "delete_dns_record",
     title: "Delete DNS Record",
     description:
       "Delete a DNS record. WARNING: This action is irreversible. Make sure you have the correct record_id.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        zone_id: {
-          type: "string",
-          description: "The zone ID",
-        },
-        record_id: {
-          type: "string",
-          description: "The DNS record ID to delete",
-        },
-      },
-      required: ["zone_id", "record_id"],
-    },
+    inputSchema: schemas.DeleteDNSRecordSchema,
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
     },
-  },
-  {
+    handler: handlers.handleDeleteDNSRecord,
+  }),
+  defineTool({
     name: "find_dns_records",
     title: "Find DNS Records",
     description:
       "Find DNS records by name to get their record IDs. Useful before updating or deleting records when you know the name but not the ID. Returns matching records with their IDs.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        zone_id: {
-          type: "string",
-          description: "The zone ID",
-        },
-        domain_name: {
-          type: "string",
-          description: "The domain name (alternative to zone_id)",
-        },
-        record_name: {
-          type: "string",
-          description:
-            "The DNS record name to search for (e.g., 'www.example.com', 'example.com', 'api.example.com')",
-        },
-        type: {
-          type: "string",
-          enum: RECORD_TYPE_ENUM,
-          description: "Optional: filter by record type",
-        },
-      },
-      required: ["record_name"],
-    },
+    inputSchema: schemas.FindDNSRecordsSchema,
+    outputSchema: outputs.FindDNSRecordsOutputSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
     },
-  },
-  {
+    handler: handlers.handleFindDNSRecords,
+  }),
+  defineTool({
     name: "backup_dns_records",
     title: "Backup DNS Records",
     description:
       "Backup DNS records to a JSON format that can be saved and used later to restore records. Can backup a single domain or ALL domains on the account. The output is a complete backup file that agents can save to disk.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        zone_id: {
-          type: "string",
-          description:
-            "The zone ID to backup. If not provided (along with domain_name), backs up ALL domains.",
-        },
-        domain_name: {
-          type: "string",
-          description:
-            "The domain name to backup. If not provided (along with zone_id), backs up ALL domains.",
-        },
-      },
-    },
+    inputSchema: schemas.BackupDNSRecordsSchema,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
     },
-  },
+    handler: handlers.handleBackupDNSRecords,
+  }),
 ];
-
-// Stamp each tool's display title into annotations.title — the pre-2025-06-18
-// spec's fallback location — so the two names can never drift.
-export const TOOLS = TOOL_DEFINITIONS.map((tool) => ({
-  ...tool,
-  annotations: { title: tool.title, ...tool.annotations },
-}));

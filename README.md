@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/cloudflare-dns-mcp.svg)](https://www.npmjs.com/package/cloudflare-dns-mcp)
 [![Tests](https://github.com/daniil-shumko/cloudflare-dns-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/daniil-shumko/cloudflare-dns-mcp/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org)
 [![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io)
 
 > ⚠️ **Security Warning**
@@ -122,6 +122,8 @@ This MCP server provides 10 tools for DNS management:
 | `update_dns_record` | Modify an existing record |
 | `delete_dns_record` | Remove a DNS record |
 | `backup_dns_records` | Export records to JSON |
+
+Every tool returns its result as JSON text. The read tools (`list_zones`, `get_zone_details`, `list_dns_records`, `get_dns_record`, `find_dns_records`) also declare an [output schema](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#output-schema) and return the same data as `structuredContent`, so clients can consume it without parsing text.
 
 ---
 
@@ -504,7 +506,7 @@ claude mcp add cloudflare-dns --env CLOUDFLARE_API_TOKEN=your_token_here -- npx 
 
 ### Prerequisites
 
-- Node.js 20 or higher (Node 22+ recommended — Node 20 reached end-of-life in April 2026)
+- Node.js 22 or higher
 - npm or yarn
 
 ### Setup
@@ -538,15 +540,16 @@ npm run start         # Run the built server
 ```
 cloudflare-dns-mcp/
 ├── src/
-│   ├── index.ts              # MCP server entry point
+│   ├── index.ts              # stdio entry point
+│   ├── server.ts             # McpServer setup and tool registration
 │   ├── globals.d.ts          # Build-time globals (__SERVER_VERSION__)
 │   ├── cloudflare/
 │   │   ├── client.ts         # Cloudflare API client
 │   │   └── types.ts          # TypeScript type definitions
 │   ├── tools/
 │   │   ├── index.ts          # Tools module exports
-│   │   ├── schemas.ts        # Zod validation schemas
-│   │   ├── definitions.ts    # MCP tool definitions
+│   │   ├── schemas.ts        # Zod input schemas (source of the published JSON Schema)
+│   │   ├── definitions.ts    # Tool registry: metadata, annotations, handlers
 │   │   ├── handlers.ts       # Tool implementations
 │   │   └── types.ts          # Tool-specific types
 │   └── utils/

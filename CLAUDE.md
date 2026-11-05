@@ -26,17 +26,18 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | node dist/in
 
 ```
 src/
-├── index.ts              # MCP server bootstrap: wires the server to stdio and
-│                         #   dispatches CallTool/ListTools to the tools module
+├── index.ts              # stdio bootstrap: serveStdio(() => createServer(...))
+├── server.ts             # createServer(): McpServer + registers every tool in TOOLS
 ├── globals.d.ts          # Declares __SERVER_VERSION__ (injected at build time)
 ├── cloudflare/
 │   ├── client.ts         # CloudflareClient class - all API communication
 │   └── types.ts          # TypeScript types for Cloudflare API v4
 ├── tools/
 │   ├── index.ts          # Tools module barrel exports
-│   ├── schemas.ts        # Zod input schemas + shared DNS_RECORD_TYPES list
-│   ├── definitions.ts    # TOOLS array: MCP JSON-Schema metadata + annotations
-│   ├── handlers.ts       # Tool handler implementations + handler registry
+│   ├── schemas.ts        # Zod input schemas (with .describe() docs) + DNS_RECORD_TYPES
+│   ├── definitions.ts    # TOOLS registry: name/title/description/annotations,
+│   │                     #   input schema and handler per tool
+│   ├── handlers.ts       # Tool handler implementations (receive validated input)
 │   └── types.ts          # Tool-specific types (backup structures, limits)
 └── utils/
     ├── config.ts         # Configuration from CLOUDFLARE_API_TOKEN env var
@@ -45,12 +46,16 @@ src/
 
 ### Key Patterns
 
+**SDK:** MCP TypeScript SDK v2 (`@modelcontextprotocol/server`) with the high-level `McpServer`. `serveStdio` negotiates the protocol era per connection, so both 2025-era clients (`initialize`) and 2026-07-28+ clients (`server/discover`) are served by the same code.
+
 **Tool Implementation Flow:**
-1. `src/tools/schemas.ts` — Zod schemas validate tool inputs (e.g., `CreateDNSRecordSchema`)
-2. `src/tools/definitions.ts` — the `TOOLS` array defines MCP tool metadata + annotations (`readOnlyHint`, `destructiveHint`); its record-type enums reuse `DNS_RECORD_TYPES` from `schemas.ts` so they never drift
-3. `src/tools/handlers.ts` — `handleToolCall` looks the tool up in the `toolHandlers` registry (a `Record`, not a switch) and runs its handler
-4. `CloudflareClient` executes API calls
+1. `src/tools/schemas.ts` — Zod schemas are the single source of truth for tool inputs: the SDK validates arguments against them (applying defaults; `.refine()` failures come back as `isError` results) and publishes their JSON Schema in `tools/list`. Field descriptions live here via `.describe()` — there is no hand-written JSON Schema.
+2. `src/tools/definitions.ts` — the `TOOLS` registry pairs each schema with its metadata, annotations (`readOnlyHint`, `destructiveHint`, ...) and handler; `defineTool` stamps `title` into `annotations.title` and ties the handler's input type to its schema
+3. `src/server.ts` — `createServer` registers every tool on an `McpServer`, wrapping handlers so thrown errors become structured `formatError` JSON
+4. `src/tools/handlers.ts` — handlers receive already-validated input; `CloudflareClient` executes API calls
 5. `formatSuccess`/`formatError` standardize output
+
+**Tests:** `tests/server.test.ts` drives `createServer` through a real SDK client over an in-memory transport (fetch stubbed); `tests/stdio.e2e.test.ts` builds and spawns the actual binary and connects in both protocol eras.
 
 **Server version:** `tsup.config.ts` injects `package.json`'s version as the `__SERVER_VERSION__` global so the version reported to MCP clients can never drift from the published package.
 
@@ -60,7 +65,7 @@ src/
 
 ### Server Communication
 
-- Uses `StdioServerTransport` for MCP protocol over stdin/stdout
+- Uses `serveStdio` for MCP over stdin/stdout (stdio only — no HTTP transport)
 - All logging goes to stderr (stdout reserved for protocol)
 - Returns JSON with `success`/`error` and `data`/`details` fields
 

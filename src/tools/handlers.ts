@@ -11,19 +11,19 @@ import type {
   ZoneSummary,
   DNSRecordSummary,
 } from "../cloudflare/types.js";
-import { formatError, formatSuccess } from "../utils/errors.js";
-import {
-  AddZoneSchema,
-  ListZonesSchema,
-  GetZoneSchema,
-  ListDNSRecordsSchema,
-  GetDNSRecordSchema,
-  CreateDNSRecordSchema,
-  UpdateDNSRecordSchema,
-  DeleteDNSRecordSchema,
-  FindDNSRecordsSchema,
-  BackupDNSRecordsSchema,
-  DNS_RECORD_TYPES,
+import { formatSuccess } from "../utils/errors.js";
+import { DNS_RECORD_TYPES } from "./schemas.js";
+import type {
+  AddZoneInput,
+  ListZonesInput,
+  GetZoneInput,
+  ListDNSRecordsInput,
+  GetDNSRecordInput,
+  CreateDNSRecordToolInput,
+  UpdateDNSRecordToolInput,
+  DeleteDNSRecordInput,
+  FindDNSRecordsInput,
+  BackupDNSRecordsInput,
 } from "./schemas.js";
 import type { DNSRecordBackup, ZoneBackup, FullBackup } from "./types.js";
 import { PAGINATION_LIMITS } from "./types.js";
@@ -81,17 +81,28 @@ function summarizeDNSRecord(record: {
 
 export interface ToolResponse {
   content: Array<{ type: "text"; text: string }>;
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
   [key: string]: unknown;
+}
+
+/**
+ * A result carrying the same JSON both as text (for every client) and as
+ * structuredContent (validated by the SDK against the tool's outputSchema).
+ */
+function structuredResult(result: object): ToolResponse {
+  return {
+    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+    structuredContent: result as Record<string, unknown>,
+  };
 }
 
 // ==================== Tool Handlers ====================
 
 export async function handleAddZone(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: AddZoneInput
 ): Promise<ToolResponse> {
-  const input = AddZoneSchema.parse(args);
   const response = await cloudflare.createZone(input.name, input.account_id, {
     type: input.type,
   });
@@ -109,9 +120,8 @@ export async function handleAddZone(
 
 export async function handleListZones(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: ListZonesInput
 ): Promise<ToolResponse> {
-  const input = ListZonesSchema.parse(args);
   const response = await cloudflare.listZones({
     page: input.page,
     per_page: input.per_page,
@@ -135,16 +145,13 @@ export async function handleListZones(
     `Found ${zones.length} zone(s)`
   );
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleGetZoneDetails(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: GetZoneInput
 ): Promise<ToolResponse> {
-  const input = GetZoneSchema.parse(args);
   let zoneId: string;
 
   if (input.zone_id) {
@@ -177,16 +184,13 @@ export async function handleGetZoneDetails(
     activated_on: zone.activated_on,
   });
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleListDNSRecords(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: ListDNSRecordsInput
 ): Promise<ToolResponse> {
-  const input = ListDNSRecordsSchema.parse(args);
   let zoneId: string;
 
   if (input.zone_id) {
@@ -219,30 +223,24 @@ export async function handleListDNSRecords(
     `Found ${records.length} DNS record(s)`
   );
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleGetDNSRecord(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: GetDNSRecordInput
 ): Promise<ToolResponse> {
-  const input = GetDNSRecordSchema.parse(args);
   const response = await cloudflare.getDNSRecord(input.zone_id, input.record_id);
 
   const result = formatSuccess(summarizeDNSRecord(response.result));
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleCreateDNSRecord(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: CreateDNSRecordToolInput
 ): Promise<ToolResponse> {
-  const input = CreateDNSRecordSchema.parse(args);
   let zoneId: string;
 
   if (input.zone_id) {
@@ -301,9 +299,8 @@ function validationErrorResponse(details: string): ToolResponse {
 
 export async function handleUpdateDNSRecord(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: UpdateDNSRecordToolInput
 ): Promise<ToolResponse> {
-  const input = UpdateDNSRecordSchema.parse(args);
 
   // Cloudflare no longer supports changing a record's type in place
   // (PATCH/PUT, end-of-life 2026-06-30). A type change is applied as an
@@ -346,7 +343,7 @@ export async function handleUpdateDNSRecord(
 
 async function replaceDNSRecordWithNewType(
   cloudflare: CloudflareClient,
-  input: ReturnType<typeof UpdateDNSRecordSchema.parse>,
+  input: UpdateDNSRecordToolInput,
   existing: DNSRecord
 ): Promise<ToolResponse> {
   const newType = input.type as DNSRecordType;
@@ -406,9 +403,8 @@ async function replaceDNSRecordWithNewType(
 
 export async function handleDeleteDNSRecord(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: DeleteDNSRecordInput
 ): Promise<ToolResponse> {
-  const input = DeleteDNSRecordSchema.parse(args);
 
   // Get record details before deletion for confirmation message
   let recordInfo = "";
@@ -437,9 +433,8 @@ export async function handleDeleteDNSRecord(
 
 export async function handleFindDNSRecords(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: FindDNSRecordsInput
 ): Promise<ToolResponse> {
-  const input = FindDNSRecordsSchema.parse(args);
   let zoneId: string;
 
   if (input.zone_id) {
@@ -465,16 +460,13 @@ export async function handleFindDNSRecords(
     `Found ${records.length} matching record(s) for "${input.record_name}"`
   );
 
-  return {
-    content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-  };
+  return structuredResult(result);
 }
 
 export async function handleBackupDNSRecords(
   cloudflare: CloudflareClient,
-  args: unknown
+  input: BackupDNSRecordsInput
 ): Promise<ToolResponse> {
-  const input = BackupDNSRecordsSchema.parse(args);
   const zonesToBackup: Array<{ id: string; name: string }> = [];
 
   // Determine which zones to backup
@@ -617,54 +609,4 @@ export async function handleBackupDNSRecords(
       },
     ],
   };
-}
-
-// ==================== Handler Registry ====================
-
-type ToolHandler = (
-  cloudflare: CloudflareClient,
-  args: unknown
-) => Promise<ToolResponse>;
-
-export const toolHandlers: Record<string, ToolHandler> = {
-  add_zone: handleAddZone,
-  list_zones: handleListZones,
-  get_zone_details: handleGetZoneDetails,
-  list_dns_records: handleListDNSRecords,
-  get_dns_record: handleGetDNSRecord,
-  create_dns_record: handleCreateDNSRecord,
-  update_dns_record: handleUpdateDNSRecord,
-  delete_dns_record: handleDeleteDNSRecord,
-  find_dns_records: handleFindDNSRecords,
-  backup_dns_records: handleBackupDNSRecords,
-};
-
-// ==================== Main Handler Dispatcher ====================
-
-export async function handleToolCall(
-  cloudflare: CloudflareClient,
-  name: string,
-  args: unknown
-): Promise<ToolResponse> {
-  const handler = toolHandlers[name];
-
-  if (!handler) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            formatError(new Error(`Unknown tool: ${name}`)),
-            null,
-            2
-          ),
-        },
-      ],
-      isError: true,
-    };
-  }
-
-  // `arguments` is optional in tools/call; treat an omitted value as `{}` so
-  // tools whose inputs are all optional (list_zones, backup_dns_records) work.
-  return handler(cloudflare, args ?? {});
 }
