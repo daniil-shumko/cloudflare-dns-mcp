@@ -40,6 +40,8 @@ The Model Context Protocol (MCP) is an open standard that allows AI assistants l
 
 ## Quick Start
 
+Requires **Node.js 22 or higher** (version 2.0 dropped Node 20, which reached end-of-life in April 2026).
+
 ### 1. Install
 
 **Option A: Install from npm (recommended)**
@@ -103,6 +105,16 @@ Add to your Claude Desktop config:
 
 The server will now be available. Try asking Claude:
 > "List all my Cloudflare domains"
+
+### Updating
+
+- **npx:** `npx` can keep running a cached older version. Use `"args": ["cloudflare-dns-mcp@latest"]` to always get the newest release, or pin a major version (`"cloudflare-dns-mcp@2"`) to control upgrades.
+- **Global install:** `npm update -g cloudflare-dns-mcp`
+- **Local clone:** `git pull && npm install && npm run build`
+
+Restart Claude after updating.
+
+**Upgrading from 1.x to 2.0:** no configuration changes are needed. 2.0 requires Node.js 22+, supports both current MCP clients and the 2026-07-28 protocol revision, and adds `structuredContent` to the read tools. One visible change: invalid tool arguments now return the MCP SDK's plain-text message (`Input validation error: ...`) instead of a `VALIDATION_ERROR` JSON object; errors from the Cloudflare API keep their JSON format with `code` and `suggestion`.
 
 ---
 
@@ -339,6 +351,10 @@ Backup DNS records to JSON format. Can backup a single domain or all domains on 
 
 If neither parameter is provided, **all domains** will be backed up.
 
+Each backed-up record includes its `type`, `name`, `content`, `ttl`, `proxied`, and (when set) `priority` and `comment`. Record types the tools can't recreate (such as a system-managed SOA) are skipped.
+
+> **Limitation:** backups do not include the structured `data` field or `tags`. Records whose content is set through `data` (CAA, SRV, HTTPS, SVCB, TLSA, …) therefore can't be recreated from a backup as-is, and restored records lose their tags. Simple records (A, AAAA, CNAME, TXT, MX, NS, …) restore fully.
+
 **Example prompts:**
 - "Backup all DNS records for example.com"
 - "Create a backup of all my domains' DNS records"
@@ -498,6 +514,10 @@ claude mcp add cloudflare-dns --env CLOUDFLARE_API_TOKEN=your_token_here -- npx 
 4. (Optional) Restrict to specific zones for better security
 5. Copy the generated token
 
+For read-only use (listing, viewing, finding and backing up records), `Zone.DNS → Read` is enough instead of `Edit`.
+
+Both user API tokens and account-owned API tokens (prefixed `cfat_`) work. If a token is restricted to specific zones, it may still *list* other zones (when it has account-wide `Zone.Zone → Read`), but DNS calls on zones outside its scope fail; see [Authentication or permission errors](#authentication-or-permission-errors).
+
 > **Note:** If you only need to manage DNS records for existing domains, you don't need `Zone.Zone → Edit`. Add this permission only if you want to use the `add_zone` tool to add new domains.
 
 ---
@@ -550,12 +570,13 @@ cloudflare-dns-mcp/
 │   │   ├── index.ts          # Tools module exports
 │   │   ├── schemas.ts        # Zod input schemas (source of the published JSON Schema)
 │   │   ├── definitions.ts    # Tool registry: metadata, annotations, handlers
+│   │   ├── outputs.ts        # Output schemas for the read tools' structuredContent
 │   │   ├── handlers.ts       # Tool implementations
 │   │   └── types.ts          # Tool-specific types
 │   └── utils/
 │       ├── config.ts         # Configuration loader
 │       └── errors.ts         # Error handling utilities
-├── tests/                    # Test suite
+├── tests/                    # Unit, protocol (in-memory client) and stdio e2e tests
 ├── dist/                     # Compiled JavaScript (generated)
 ├── package.json
 ├── tsconfig.json
@@ -571,6 +592,8 @@ Run the test suite:
 ```bash
 npm test
 ```
+
+The suite has three layers: unit tests for schemas, handlers, the API client and error formatting; protocol tests (`tests/server.test.ts`) that drive the server with a real MCP client over an in-memory transport, with the Cloudflare API stubbed; and an end-to-end test (`tests/stdio.e2e.test.ts`) that builds and spawns the server and connects over stdio with both 2025-11-25 and 2026-07-28 clients. No test calls the real Cloudflare API.
 
 Test the server manually:
 
@@ -599,11 +622,14 @@ The API token is not set. Make sure you've added it to your MCP configuration's 
 - Your API token might not have access to this zone
 - Check for typos in the domain name
 
-### "Permission denied" errors
+### Authentication or permission errors
 
-Your API token needs both permissions:
-- `Zone.Zone`: Read
-- `Zone.DNS`: Edit
+The error's `code` tells the two cases apart:
+
+- **Token is valid but lacks permission** (`CF_10000` "Authentication error" with HTTP 403, or `CF_6111`): the token isn't permitted for that zone or action. This is common with tokens restricted to specific zones — they can list zones they can't read DNS for. Check the token's zone resources and that it has `Zone.DNS` (Read, or Edit for changes) and `Zone.Zone: Read`; `add_zone` also needs `Zone.Zone: Edit`. The error includes a `documentation_url` for the API endpoint that was denied.
+- **Token is invalid, expired or malformed** (`CF_9109` "Invalid access token", `CF_10000` with HTTP 401, or `CF_6003` / `CF_9106`): check that `CLOUDFLARE_API_TOKEN` is copied correctly and still active.
+
+The `suggestion` field in the error response states which case applies.
 
 ### Server not appearing in Claude Desktop
 
@@ -670,6 +696,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 - Follow the existing code style
 - Add TypeScript types for new features
+- Tool input schemas and the parameter descriptions clients see live in `src/tools/schemas.ts` (Zod `.describe()`); there is no separate JSON Schema to edit
 - Update README for new tools or parameters
 - Test changes with both Claude Desktop and Claude Code
 

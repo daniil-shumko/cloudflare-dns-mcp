@@ -37,6 +37,7 @@ src/
 │   ├── schemas.ts        # Zod input schemas (with .describe() docs) + DNS_RECORD_TYPES
 │   ├── definitions.ts    # TOOLS registry: name/title/description/annotations,
 │   │                     #   input schema and handler per tool
+│   ├── outputs.ts        # Lenient output schemas for read tools' structuredContent
 │   ├── handlers.ts       # Tool handler implementations (receive validated input)
 │   └── types.ts          # Tool-specific types (backup structures, limits)
 └── utils/
